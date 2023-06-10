@@ -6,7 +6,7 @@ use reqwest::{Client, header::HeaderMap};
 use tokio::fs::File;
 use tokio::io::{AsyncWriteExt, AsyncReadExt};
 use crate::modloader::ModLoader;
-use crate::modpack::flame::model::FileEntry;
+use crate::modpack::flame::model::{ClientManifest, FileEntry};
 
 use self::client::FlameClient;
 
@@ -152,7 +152,7 @@ async fn setup(ctx: &mut Context) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn resolve_mc_info(ctx: &mut Context) -> anyhow::Result<()> {
+async fn download_client(ctx: &mut Context) -> anyhow::Result<()> {
     let client_file = if ctx.main_file.clone().is_some_and(|entry| !entry.is_server_pack) {
         ctx.main_file.clone().unwrap()
     } else if ctx.parent_file.clone().is_some_and(|entry| !entry.is_server_pack) {
@@ -161,16 +161,53 @@ async fn resolve_mc_info(ctx: &mut Context) -> anyhow::Result<()> {
         panic!()
     };
 
+    let file_path = download_file(&client_file.download_url, &client_file.file_name)
+        .await?;
+    let file = std::fs::File::open(file_path)?;
+    let mut archive = zip::ZipArchive::new(file)?;
+
+    let client_path = PathBuf::from("./.mcsi")
+        .join("client");
+    if client_path.exists() {
+        std::fs::remove_dir_all(&client_path)?;
+    }
+    std::fs::create_dir(&client_path)?;
+    archive.extract(&client_path)?;
+
+    Ok(())
+}
+
+async fn resolve_mc_info(ctx: &mut Context) -> anyhow::Result<()> {
+    download_client(ctx).await?;
+
+    let flame_manifest_path = PathBuf::from("/mcsi")
+        .join("client")
+        .join("manifest.json");
+    let manifest_contents = std::fs::read_to_string(flame_manifest_path)?;
+    let flame_manifest: ClientManifest = serde_json::from_str(manifest_contents.as_str())?;
+
+
+
+    Ok(())
+}
+
+async fn download_files(ctx: &mut Context) -> anyhow::Result<()> {
+    let main_file = ctx.main_file.clone().expect("must exist");
+
+    Ok(())
+}
+
+async fn download_file(url: &str, file_name: &str) -> anyhow::Result<PathBuf> {
     let file_path = PathBuf::from("./.mcsi")
-        .join(&client_file.file_name);
+        .join(file_name);
     if file_path.is_file() {
         std::fs::remove_file(&file_path)?;
     }
 
-    let mut file = File::create(file_path).await?;
-    println!("[2/?] Downloading {0}...", &client_file.file_name);
+    let mut file = File::create(&file_path).await?;
+    println!("[2/?] Downloading {0}...", &file_name);
 
-    let mut stream = reqwest::get(client_file.download_url)
+    let mut stream = reqwest::get(url)
         .await?
         .bytes_stream();
 
@@ -180,13 +217,7 @@ async fn resolve_mc_info(ctx: &mut Context) -> anyhow::Result<()> {
     }
 
     file.flush().await?;
-    println!("[3/?] {0} downloaded", &client_file.file_name);
+    println!("Downloaded {0}", file_name);
 
-    Ok(())
-}
-
-async fn download_files(ctx: &mut Context) -> anyhow::Result<()> {
-    let main_file = ctx.main_file.clone().expect("must exist");
-
-    Ok(())
+    Ok(file_path)
 }

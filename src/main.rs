@@ -6,6 +6,7 @@ use cli::Cli;
 mod cli;
 mod modpack;
 mod modloader;
+mod version;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
