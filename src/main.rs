@@ -7,6 +7,7 @@ mod cli;
 mod modpack;
 mod modloader;
 mod version;
+pub mod fs_utils;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

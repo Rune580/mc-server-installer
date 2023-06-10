@@ -1,6 +1,8 @@
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
+use thiserror::Error;
 
+#[derive(Clone, Debug)]
 pub struct McVersion {
     pub major: u8,
     pub minor: u8,
@@ -8,7 +10,9 @@ pub struct McVersion {
 }
 
 impl McVersion {
-
+    pub fn as_str(&self) -> String {
+        format!("{0}.{1}.{2}", self.major, self.minor, self.patch)
+    }
 }
 
 impl FromStr for McVersion {
@@ -16,21 +20,24 @@ impl FromStr for McVersion {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let nums = s.split(".");
-        if nums.count() != 3 {
-            Err(McVersionParseError::InvalidInput)
+        if nums.clone().count() != 3 {
+            return Err(McVersionParseError::InvalidInput);
         }
+
+        let nums: Vec<u8> = nums
+            .map(|entry| u8::from_str(entry).unwrap())
+            .collect();
+
+        Ok(McVersion {
+            major: nums[0],
+            minor: nums[1],
+            patch: nums[2]
+        })
     }
 }
 
-#[derive()]
+#[derive(Error, Clone, Debug)]
 pub enum  McVersionParseError {
-    InvalidInput
-}
-
-impl Display for McVersionParseError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            McVersionParseError::InvalidInput => f.write_str("Invalid format")
-        }
-    }
+    #[error("Input is invalid")]
+    InvalidInput,
 }

@@ -4,9 +4,13 @@ use futures_util::StreamExt;
 use log::info;
 use reqwest::{Client, header::HeaderMap};
 use tokio::fs::File;
-use tokio::io::{AsyncWriteExt, AsyncReadExt};
+use tokio::io::AsyncWriteExt;
+use walkdir::WalkDir;
+use crate::fs_utils::download_file;
+use crate::modloader::fabric::install_fabric;
 use crate::modloader::ModLoader;
 use crate::modpack::flame::model::{ClientManifest, FileEntry};
+use crate::version::McVersion;
 
 use self::client::FlameClient;
 
@@ -21,7 +25,7 @@ struct Context {
     version: String,
     main_file: Option<FileEntry>,
     parent_file: Option<FileEntry>,
-    mc_version: Option<String>,
+    mc_version: Option<McVersion>,
     mod_loader: Option<ModLoader>,
 }
 
@@ -51,7 +55,7 @@ pub async fn handle_flame(
     setup(&mut ctx).await?;
     resolve_main_file(&mut ctx).await?;
     ensure_server_pack(&mut ctx).await?;
-    resolve_mc_info(&mut ctx).await?;
+    download_modpack(&mut ctx).await?;
 
     Ok(())
 }
@@ -152,6 +156,61 @@ async fn setup(ctx: &mut Context) -> anyhow::Result<()> {
     Ok(())
 }
 
+async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
+    download_client(ctx).await?;
+    download_server(ctx).await?;
+
+    resolve_mc_info(ctx).await?;
+
+    let work_dir = PathBuf::from("./.mcsi")
+        .join("work_dir");
+    if work_dir.exists() {
+        std::fs::remove_dir_all(&work_dir)?;
+    }
+    std::fs::create_dir(&work_dir)?;
+
+    if ctx.parent_file.is_some() {
+        let server_path = PathBuf::from("./.mcsi")
+            .join("server");
+
+        crate::fs_utils::recursive_copy_to_dir(&server_path, &work_dir)
+            .await?;
+
+        match &ctx.mod_loader.clone().unwrap() {
+            ModLoader::Forge { .. } => {}
+            ModLoader::Fabric { version } => {
+                println!("Installing fabric");
+
+                install_fabric(ctx.mc_version.clone().unwrap(), version, &work_dir)
+                    .await?;
+
+                println!("done!");
+            }
+            ModLoader::Quilt { .. } => {}
+        }
+    }
+
+    Ok(())
+}
+
+async fn resolve_mc_info(ctx: &mut Context) -> anyhow::Result<()> {
+    let flame_manifest_path = PathBuf::from("./.mcsi")
+        .join("client")
+        .join("manifest.json");
+    let manifest_contents = std::fs::read_to_string(flame_manifest_path)?;
+    let flame_manifest: ClientManifest = serde_json::from_str(manifest_contents.as_str())?;
+
+    let mc_version = McVersion::from_str(&flame_manifest.minecraft.version)?;
+    ctx.mc_version = Some(mc_version);
+
+    let primary_loader = &flame_manifest.minecraft.mod_loaders.iter().find(|loader| loader.primary).unwrap();
+    let mod_loader = ModLoader::from_str(&primary_loader.id)?;
+    ctx.mod_loader = Some(mod_loader);
+
+    Ok(())
+}
+
+
 async fn download_client(ctx: &mut Context) -> anyhow::Result<()> {
     let client_file = if ctx.main_file.clone().is_some_and(|entry| !entry.is_server_pack) {
         ctx.main_file.clone().unwrap()
@@ -161,7 +220,7 @@ async fn download_client(ctx: &mut Context) -> anyhow::Result<()> {
         panic!()
     };
 
-    let file_path = download_file(&client_file.download_url, &client_file.file_name)
+    let file_path = download_file(&client_file.download_url, PathBuf::from("./.mcsi/").join(client_file.file_name))
         .await?;
     let file = std::fs::File::open(file_path)?;
     let mut archive = zip::ZipArchive::new(file)?;
@@ -177,47 +236,25 @@ async fn download_client(ctx: &mut Context) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn resolve_mc_info(ctx: &mut Context) -> anyhow::Result<()> {
-    download_client(ctx).await?;
+async fn download_server(ctx: &mut Context) -> anyhow::Result<()> {
+    let server_pack = if ctx.main_file.clone().is_some_and(|entry| entry.is_server_pack) {
+        ctx.main_file.clone().unwrap()
+    } else {
+        return Ok(())
+    };
 
-    let flame_manifest_path = PathBuf::from("/mcsi")
-        .join("client")
-        .join("manifest.json");
-    let manifest_contents = std::fs::read_to_string(flame_manifest_path)?;
-    let flame_manifest: ClientManifest = serde_json::from_str(manifest_contents.as_str())?;
+    let file_pack = download_file(&server_pack.download_url, PathBuf::from("./.mcsi/").join(server_pack.file_name))
+        .await?;
+    let file = std::fs::File::open(file_pack)?;
+    let mut archive = zip::ZipArchive::new(file)?;
 
-
+    let server_path = PathBuf::from("./.mcsi")
+        .join("server");
+    if server_path.exists() {
+        std::fs::remove_dir_all(&server_path)?;
+    }
+    std::fs::create_dir(&server_path)?;
+    archive.extract(&server_path)?;
 
     Ok(())
-}
-
-async fn download_files(ctx: &mut Context) -> anyhow::Result<()> {
-    let main_file = ctx.main_file.clone().expect("must exist");
-
-    Ok(())
-}
-
-async fn download_file(url: &str, file_name: &str) -> anyhow::Result<PathBuf> {
-    let file_path = PathBuf::from("./.mcsi")
-        .join(file_name);
-    if file_path.is_file() {
-        std::fs::remove_file(&file_path)?;
-    }
-
-    let mut file = File::create(&file_path).await?;
-    println!("[2/?] Downloading {0}...", &file_name);
-
-    let mut stream = reqwest::get(url)
-        .await?
-        .bytes_stream();
-
-    while let Some(chunk_result) = stream.next().await {
-        let chunk = chunk_result?;
-        file.write_all(&chunk).await?;
-    }
-
-    file.flush().await?;
-    println!("Downloaded {0}", file_name);
-
-    Ok(file_path)
 }
