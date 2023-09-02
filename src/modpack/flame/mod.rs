@@ -8,6 +8,7 @@ use tokio::io::AsyncWriteExt;
 use walkdir::WalkDir;
 use crate::fs_utils::download_file;
 use crate::modloader::fabric::install_fabric;
+use crate::modloader::forge::install_forge;
 use crate::modloader::ModLoader;
 use crate::modpack::flame::model::{ClientManifest, FileEntry};
 use crate::version::McVersion;
@@ -177,8 +178,14 @@ async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
             .await?;
 
         match &ctx.mod_loader.clone().unwrap() {
-            ModLoader::Forge { .. } => {}
+            ModLoader::Forge { version } => {
+                info!("loader version resolved to: {}", version);
+
+                install_forge(ctx.mc_version.clone().unwrap(), version, &work_dir)
+                    .await?;
+            }
             ModLoader::Fabric { version } => {
+                info!("loader version resolved to: {}", version);
                 println!("Installing fabric");
 
                 install_fabric(ctx.mc_version.clone().unwrap(), version, &work_dir)
