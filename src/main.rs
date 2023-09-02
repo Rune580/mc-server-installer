@@ -15,7 +15,7 @@ async fn main() -> anyhow::Result<()> {
 
     CombinedLogger::init(
         vec![
-            TermLogger::new(LevelFilter::Info, simplelog::Config::default(), TerminalMode::Mixed, ColorChoice::Auto)
+            TermLogger::new(LevelFilter::Debug, simplelog::Config::default(), TerminalMode::Mixed, ColorChoice::Auto)
         ]
     )?;
 
