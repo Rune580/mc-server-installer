@@ -1,6 +1,7 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use futures_util::StreamExt;
+use log::debug;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt};
 use tokio::io::AsyncWriteExt;
 use walkdir::WalkDir;
@@ -33,7 +34,7 @@ pub async fn recursive_copy_to_dir<TSrc: AsRef<Path>, TDst: AsRef<Path>>(src_dir
             }
         }
 
-        println!("Copy from {0} to {1}", entry.path().display(), dst.display());
+        debug!("Copy file from {0} to {1}", entry.path().display(), dst.display());
 
         if dst.is_file() {
             std::fs::remove_file(&dst)?;
