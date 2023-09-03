@@ -47,6 +47,7 @@ pub struct Pagination {
 #[derive(Clone, Debug, Deserialize)]
 pub struct ClientManifest {
     pub minecraft: ManifestMcInfo,
+    pub files: Vec<ManifestFileEntry>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -60,4 +61,13 @@ pub struct ManifestMcInfo {
 pub struct ManifestModLoader {
     pub id: String,
     pub primary: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct ManifestFileEntry {
+    #[serde(rename = "projectID")]
+    pub project_id: u32,
+    #[serde(rename = "fileID")]
+    pub file_id: u32,
+    pub required: bool,
 }

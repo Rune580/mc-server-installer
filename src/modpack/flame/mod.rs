@@ -2,11 +2,13 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use log::{debug, error, info};
 use reqwest::{Client, header::HeaderMap};
+use thiserror::Error;
+use tokio::fs::create_dir_all;
 use crate::fs_utils::{download_file, recursive_copy_to_dir, work_dir};
 use crate::modloader::fabric::install_fabric;
 use crate::modloader::forge::install_forge;
 use crate::modloader::ModLoader;
-use crate::modpack::flame::model::{ClientManifest, FileEntry};
+use crate::modpack::flame::model::{ClientManifest, FileEntry, ManifestFileEntry};
 use crate::version::McVersion;
 
 use self::client::FlameClient;
@@ -24,6 +26,7 @@ struct Context {
     parent_file: Option<FileEntry>,
     mc_version: Option<McVersion>,
     mod_loader: Option<ModLoader>,
+    mod_list: Option<Vec<ManifestFileEntry>>,
     target_dir: PathBuf,
 }
 
@@ -51,6 +54,7 @@ pub async fn handle_flame<T: AsRef<Path>>(
         parent_file: None,
         mc_version: None,
         mod_loader: None,
+        mod_list: None,
         target_dir: target_dir.as_ref().to_path_buf(),
     };
 
@@ -178,7 +182,37 @@ async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
         recursive_copy_to_dir(&server_path, work_dir.clone())
             .await?;
     } else {
-        error!("Client pack installation is currently not supported!");
+        let overrides = PathBuf::from("./.mcsi")
+            .join("client")
+            .join("overrides");
+
+        if overrides.is_dir() {
+            recursive_copy_to_dir(overrides, work_dir.clone())
+                .await?;
+        }
+
+        let mods_dir = PathBuf::from(work_dir.clone())
+            .join("mods");
+        if !mods_dir.is_dir() {
+            create_dir_all(&mods_dir)
+                .await?;
+        }
+
+        let Some(mod_list) = &ctx.mod_list.clone() else { return Err(FlameError::NoModList)? };
+        for entry in mod_list {
+            if !entry.required {
+                continue;
+            }
+
+            let info = ctx.client.get_file_info(entry.project_id as u64, entry.file_id as u64)
+                .await?;
+
+            let dst = PathBuf::from(mods_dir.clone())
+                .join(info.file_name);
+
+            download_file(&info.download_url, dst)
+                .await?;
+        }
     }
 
     match &ctx.mod_loader.clone().unwrap() {
@@ -187,6 +221,8 @@ async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
 
             install_forge(ctx.mc_version.clone().unwrap(), version, &work_dir)
                 .await?;
+
+            info!("finished installing forge!");
         }
         ModLoader::Fabric { version } => {
             info!("loader version resolved to: {}", version);
@@ -204,11 +240,13 @@ async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
 }
 
 async fn post_process(ctx: &mut Context) -> anyhow::Result<()> {
+    info!("Cleaning up...");
     let work_dir = work_dir();
 
     recursive_copy_to_dir(work_dir, &ctx.target_dir)
         .await?;
 
+    info!("Server is installed!");
     Ok(())
 }
 
@@ -225,6 +263,9 @@ async fn resolve_mc_info(ctx: &mut Context) -> anyhow::Result<()> {
     let primary_loader = &flame_manifest.minecraft.mod_loaders.iter().find(|loader| loader.primary).unwrap();
     let mod_loader = ModLoader::from_str(&primary_loader.id)?;
     ctx.mod_loader = Some(mod_loader);
+
+    let mod_list = &flame_manifest.files;
+    ctx.mod_list = Some(mod_list.to_owned());
 
     Ok(())
 }
@@ -276,4 +317,10 @@ async fn download_server(ctx: &mut Context) -> anyhow::Result<()> {
     archive.extract(&server_path)?;
 
     Ok(())
+}
+
+#[derive(Error, Clone, Debug)]
+pub enum FlameError {
+    #[error("Client manifest has no mod list!")]
+    NoModList,
 }

@@ -24,8 +24,7 @@ pub async fn install_forge<P: AsRef<Path>>(mc_version: McVersion, forge_version:
     Command::new("java")
         .current_dir(&work_dir)
         .args(["-jar", "installer.jar", "--installServer"])
-        .stdout(Stdio::inherit())
-        .spawn()?;
+        .output()?;
 
     Ok(())
 }
