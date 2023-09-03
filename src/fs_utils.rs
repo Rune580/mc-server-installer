@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use futures_util::StreamExt;
@@ -96,6 +97,49 @@ pub async fn download_file<T: AsRef<Path>>(url: &str, dst: T) -> anyhow::Result<
     println!("Downloaded {0}", file_name);
 
     Ok(file_path.to_path_buf())
+}
+
+struct DirDepthEntry {
+    depth: usize,
+    siblings: usize,
+    path: PathBuf,
+}
+
+pub async fn get_closest_common_parent<T: AsRef<Path>>(dir: T) -> anyhow::Result<PathBuf> {
+    let dir = dir.as_ref();
+    let mut items: Vec<DirDepthEntry> = Vec::new();
+    let mut siblings: HashMap<usize, usize> = HashMap::new();
+
+    for entry in WalkDir::new(dir) {
+        let entry = entry?;
+        if !entry.path().is_dir() {
+            continue;
+        }
+
+        let item = DirDepthEntry {
+            depth: entry.depth(),
+            siblings: 0,
+            path: entry.path().to_path_buf(),
+        };
+
+        items.push(item);
+        siblings.entry(entry.depth())
+            .and_modify(|val| *val += 1)
+            .or_insert(0);
+    }
+
+    let common = items.iter_mut()
+        .map(|item| {
+            item.siblings = siblings.get(&item.depth).unwrap().clone();
+            item
+        })
+        .filter(|item| item.siblings == 0)
+        .max_by_key(|item| item.depth)
+        .unwrap();
+
+    let common_dir = PathBuf::from(&common.path);
+
+    Ok(common_dir)
 }
 
 pub fn work_dir() -> PathBuf {

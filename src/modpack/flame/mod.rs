@@ -4,7 +4,8 @@ use log::{debug, error, info};
 use reqwest::{Client, header::HeaderMap};
 use thiserror::Error;
 use tokio::fs::create_dir_all;
-use crate::fs_utils::{download_file, recursive_copy_to_dir, work_dir};
+use walkdir::WalkDir;
+use crate::fs_utils::{download_file, get_closest_common_parent, recursive_copy_to_dir, work_dir};
 use crate::modloader::fabric::install_fabric;
 use crate::modloader::forge::install_forge;
 use crate::modloader::ModLoader;
@@ -179,7 +180,10 @@ async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
         let server_path = PathBuf::from("./.mcsi")
             .join("server");
 
-        recursive_copy_to_dir(&server_path, work_dir.clone())
+        let server_files = get_closest_common_parent(server_path)
+            .await?;
+
+        recursive_copy_to_dir(&server_files, work_dir.clone())
             .await?;
     } else {
         let overrides = PathBuf::from("./.mcsi")
