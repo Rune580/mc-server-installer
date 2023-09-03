@@ -1,12 +1,12 @@
 use clap::{command, Subcommand, Parser};
 
-#[derive(Parser, Clone)]
+#[derive(Parser, Clone, Debug)]
 pub struct Cli {
     #[command(subcommand)]
     pub modpack: ModPack,
 }
 
-#[derive(Clone, Subcommand)]
+#[derive(Clone, Debug, Subcommand)]
 pub enum ModPack {
     Flame {
         #[clap(env, long)]

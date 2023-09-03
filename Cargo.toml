@@ -6,8 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.71"
+anyhow = { version = "1.0.71", features = ["backtrace"] }
 clap = { version = "4.3.3", features = ["derive", "env"] }
+dotenv = { version = "0.15.0", features = ["clap"] }
 futures-util = { version = "0.3.28", features = ["io", "tokio-io"] }
 log = "0.4.18"
 reqwest = { version = "0.11.18", features = ["stream"] }

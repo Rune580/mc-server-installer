@@ -1,4 +1,5 @@
 use clap::Parser;
+use dotenv::dotenv;
 use log::LevelFilter;
 use simplelog::{ColorChoice, CombinedLogger, TerminalMode, TermLogger};
 use cli::Cli;
@@ -11,6 +12,8 @@ pub mod fs_utils;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    dotenv().ok();
+
     let cli = Cli::parse();
 
     CombinedLogger::init(

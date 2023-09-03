@@ -37,7 +37,7 @@ impl FromStr for McVersion {
 }
 
 #[derive(Error, Clone, Debug)]
-pub enum  McVersionParseError {
+pub enum McVersionParseError {
     #[error("Input is invalid")]
     InvalidInput,
 }

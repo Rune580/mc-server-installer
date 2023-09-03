@@ -5,7 +5,7 @@ use crate::modpack::flame::model::{FileEntry, FilesList};
 
 use super::model::ModPackInfo;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FlameClient {
     client: Client,
 }

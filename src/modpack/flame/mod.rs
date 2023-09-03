@@ -1,11 +1,7 @@
 use std::path::PathBuf;
 use std::str::FromStr;
-use futures_util::StreamExt;
-use log::info;
+use log::{debug, info};
 use reqwest::{Client, header::HeaderMap};
-use tokio::fs::File;
-use tokio::io::AsyncWriteExt;
-use walkdir::WalkDir;
 use crate::fs_utils::download_file;
 use crate::modloader::fabric::install_fabric;
 use crate::modloader::forge::install_forge;
@@ -19,7 +15,7 @@ mod model;
 mod client;
 mod manifest;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Context {
     client: FlameClient,
     project_id: u64,
@@ -35,6 +31,8 @@ pub async fn handle_flame(
     project_id: u64,
     version: String
 ) -> anyhow::Result<()> {
+    debug!("api_key: \'{api_key}\' project_id: \'{project_id}\' version: \'{version}\'");
+
     let mut headers = HeaderMap::new();
     headers.insert("Accept", "application/json".parse()?);
     headers.insert("x-api-key", api_key.parse()?);
@@ -174,7 +172,7 @@ async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
         let server_path = PathBuf::from("./.mcsi")
             .join("server");
 
-        crate::fs_utils::recursive_copy_to_dir(&server_path, &work_dir)
+        crate::fs_utils::recursive_copy_to_dir(&server_path, work_dir.clone())
             .await?;
 
         match &ctx.mod_loader.clone().unwrap() {
