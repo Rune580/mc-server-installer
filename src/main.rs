@@ -27,7 +27,8 @@ async fn main() -> anyhow::Result<()> {
             api_key,
             project_id,
             version,
-        } => modpack::flame::handle_flame(api_key, project_id, version).await?,
+            target_dir,
+        } => modpack::flame::handle_flame(api_key, project_id, version, target_dir).await?,
     }
 
     Ok(())

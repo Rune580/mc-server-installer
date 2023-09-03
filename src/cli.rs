@@ -15,5 +15,7 @@ pub enum ModPack {
         project_id: u64,
         #[clap(env, long)]
         version: String,
+        #[clap(env, long)]
+        target_dir: String,
     },
 }

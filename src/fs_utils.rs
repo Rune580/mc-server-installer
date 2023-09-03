@@ -97,3 +97,7 @@ pub async fn download_file<T: AsRef<Path>>(url: &str, dst: T) -> anyhow::Result<
 
     Ok(file_path.to_path_buf())
 }
+
+pub fn work_dir() -> PathBuf {
+    PathBuf::from("./.mcsi").join("work_dir")
+}

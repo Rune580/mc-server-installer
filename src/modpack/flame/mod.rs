@@ -1,8 +1,8 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use log::{debug, info};
+use log::{debug, error, info};
 use reqwest::{Client, header::HeaderMap};
-use crate::fs_utils::download_file;
+use crate::fs_utils::{download_file, recursive_copy_to_dir, work_dir};
 use crate::modloader::fabric::install_fabric;
 use crate::modloader::forge::install_forge;
 use crate::modloader::ModLoader;
@@ -24,12 +24,14 @@ struct Context {
     parent_file: Option<FileEntry>,
     mc_version: Option<McVersion>,
     mod_loader: Option<ModLoader>,
+    target_dir: PathBuf,
 }
 
-pub async fn handle_flame(
+pub async fn handle_flame<T: AsRef<Path>>(
     api_key: String,
     project_id: u64,
-    version: String
+    version: String,
+    target_dir: T,
 ) -> anyhow::Result<()> {
     debug!("api_key: \'{api_key}\' project_id: \'{project_id}\' version: \'{version}\'");
 
@@ -49,12 +51,14 @@ pub async fn handle_flame(
         parent_file: None,
         mc_version: None,
         mod_loader: None,
+        target_dir: target_dir.as_ref().to_path_buf(),
     };
 
     setup(&mut ctx).await?;
     resolve_main_file(&mut ctx).await?;
     ensure_server_pack(&mut ctx).await?;
     download_modpack(&mut ctx).await?;
+    post_process(&mut ctx).await?;
 
     Ok(())
 }
@@ -161,8 +165,7 @@ async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
 
     resolve_mc_info(ctx).await?;
 
-    let work_dir = PathBuf::from("./.mcsi")
-        .join("work_dir");
+    let work_dir = work_dir();
     if work_dir.exists() {
         std::fs::remove_dir_all(&work_dir)?;
     }
@@ -172,28 +175,39 @@ async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
         let server_path = PathBuf::from("./.mcsi")
             .join("server");
 
-        crate::fs_utils::recursive_copy_to_dir(&server_path, work_dir.clone())
+        recursive_copy_to_dir(&server_path, work_dir.clone())
             .await?;
-
-        match &ctx.mod_loader.clone().unwrap() {
-            ModLoader::Forge { version } => {
-                info!("loader version resolved to: {}", version);
-
-                install_forge(ctx.mc_version.clone().unwrap(), version, &work_dir)
-                    .await?;
-            }
-            ModLoader::Fabric { version } => {
-                info!("loader version resolved to: {}", version);
-                println!("Installing fabric");
-
-                install_fabric(ctx.mc_version.clone().unwrap(), version, &work_dir)
-                    .await?;
-
-                println!("done!");
-            }
-            ModLoader::Quilt { .. } => {}
-        }
+    } else {
+        error!("Client pack installation is currently not supported!");
     }
+
+    match &ctx.mod_loader.clone().unwrap() {
+        ModLoader::Forge { version } => {
+            info!("loader version resolved to: {}", version);
+
+            install_forge(ctx.mc_version.clone().unwrap(), version, &work_dir)
+                .await?;
+        }
+        ModLoader::Fabric { version } => {
+            info!("loader version resolved to: {}", version);
+            println!("Installing fabric");
+
+            install_fabric(ctx.mc_version.clone().unwrap(), version, &work_dir)
+                .await?;
+
+            println!("done!");
+        }
+        ModLoader::Quilt { .. } => {}
+    }
+
+    Ok(())
+}
+
+async fn post_process(ctx: &mut Context) -> anyhow::Result<()> {
+    let work_dir = work_dir();
+
+    recursive_copy_to_dir(work_dir, &ctx.target_dir)
+        .await?;
 
     Ok(())
 }
