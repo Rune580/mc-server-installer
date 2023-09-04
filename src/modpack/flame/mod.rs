@@ -72,7 +72,7 @@ async fn resolve_main_file(ctx: &mut Context) -> anyhow::Result<()> {
     if ctx.version.eq_ignore_ascii_case("latest") {
         info!("Version set to \'latest\', determining file id...");
 
-        let info = ctx.client.get_modpack_info(ctx.project_id)
+        let info = ctx.client.get_mod_info(ctx.project_id)
             .await?;
 
         let file_id = info.main_file_id;
@@ -177,6 +177,7 @@ async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
     std::fs::create_dir(&work_dir)?;
 
     if ctx.parent_file.is_some() {
+        // Download server pack
         let server_path = PathBuf::from("./.mcsi")
             .join("server");
 
@@ -186,6 +187,7 @@ async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
         recursive_copy_to_dir(&server_files, work_dir.clone())
             .await?;
     } else {
+        // Download client pack
         let overrides = PathBuf::from("./.mcsi")
             .join("client")
             .join("overrides");
@@ -205,6 +207,13 @@ async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
         let Some(mod_list) = &ctx.mod_list.clone() else { return Err(FlameError::NoModList)? };
         for entry in mod_list {
             if !entry.required {
+                continue;
+            }
+
+            let mod_info = ctx.client.get_mod_info(entry.project_id as u64)
+                .await?;
+
+            if mod_info.class_id != 6 {
                 continue;
             }
 

@@ -1,12 +1,14 @@
 use serde::Deserialize;
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct ModPackInfo {
+pub struct ModInfo {
     pub id: u64,
     #[serde(rename = "mainFileId")]
     pub main_file_id: u64,
     #[serde(rename = "latestFiles")]
     pub latest_files: Vec<FileEntry>,
+    #[serde(rename = "classId")]
+    pub class_id: u64,
 }
 
 #[derive(Clone, Debug, Deserialize)]

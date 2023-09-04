@@ -3,7 +3,7 @@ use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use crate::modpack::flame::model::{FileEntry, FilesList};
 
-use super::model::ModPackInfo;
+use super::model::ModInfo;
 
 #[derive(Clone, Debug)]
 pub struct FlameClient {
@@ -17,13 +17,13 @@ impl FlameClient {
         }
     }
 
-    pub async fn get_modpack_info(&mut self, project_id: u64) -> anyhow::Result<ModPackInfo> {
+    pub async fn get_mod_info(&mut self, project_id: u64) -> anyhow::Result<ModInfo> {
         let url = format!("https://api.curseforge.com/v1/mods/{0}", project_id);
         let resp = self.client.get(url)
             .send().await?
             .text().await?;
 
-        let info: ModPackInfo = data_root(resp)?;
+        let info: ModInfo = data_root(resp)?;
 
         Ok(info)
     }
