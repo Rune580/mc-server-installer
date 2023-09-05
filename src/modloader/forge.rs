@@ -1,5 +1,6 @@
+use std::fs::remove_file;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use crate::fs_utils::download_file;
 use crate::version::McVersion;
 
@@ -25,6 +26,8 @@ pub async fn install_forge<P: AsRef<Path>>(mc_version: McVersion, forge_version:
         .current_dir(&work_dir)
         .args(["-jar", "installer.jar", "--installServer"])
         .output()?;
+
+    remove_file(installer_dst)?;
 
     Ok(())
 }

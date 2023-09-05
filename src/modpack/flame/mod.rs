@@ -5,7 +5,7 @@ use reqwest::{Client, header::HeaderMap};
 use thiserror::Error;
 use tokio::fs::create_dir_all;
 use walkdir::WalkDir;
-use crate::fs_utils::{download_file, get_closest_common_parent, recursive_copy_to_dir, work_dir};
+use crate::fs_utils::{download_file, file_path_relative_to, get_closest_common_parent, recursive_copy_to_dir, work_dir};
 use crate::modloader::fabric::install_fabric;
 use crate::modloader::forge::install_forge;
 use crate::modloader::ModLoader;
@@ -172,24 +172,25 @@ async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
 
     let work_dir = work_dir();
     if work_dir.exists() {
-        std::fs::remove_dir_all(&work_dir)?;
+        remove_dir_all(&work_dir)?;
     }
-    std::fs::create_dir(&work_dir)?;
+    create_dir(&work_dir)?;
+
+    let server_path = PathBuf::from("./.mcsi")
+        .join("server");
+    let client_path = PathBuf::from("./.mcsi")
+        .join("client");
 
     if ctx.parent_file.is_some() {
-        // Download server pack
-        let server_path = PathBuf::from("./.mcsi")
-            .join("server");
-
-        let server_files = get_closest_common_parent(server_path)
+        // Extract server pack
+        let server_files = get_closest_common_parent(&server_path)
             .await?;
 
         recursive_copy_to_dir(&server_files, work_dir.clone())
             .await?;
     } else {
-        // Download client pack
-        let overrides = PathBuf::from("./.mcsi")
-            .join("client")
+        // Extract client pack
+        let overrides = client_path
             .join("overrides");
 
         if overrides.is_dir() {
@@ -228,6 +229,13 @@ async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
         }
     }
 
+    if server_path.is_dir() {
+        remove_dir_all(server_path)?;
+    }
+    if client_path.is_dir() {
+        remove_dir_all(client_path)?;
+    }
+
     match &ctx.mod_loader.clone().unwrap() {
         ModLoader::Forge { version } => {
             info!("loader version resolved to: {}", version);
@@ -264,10 +272,10 @@ async fn post_process(ctx: &mut Context) -> anyhow::Result<()> {
 }
 
 async fn resolve_mc_info(ctx: &mut Context) -> anyhow::Result<()> {
-    let flame_manifest_path = PathBuf::from("./.mcsi")
+    let client_manifest_path = PathBuf::from("./.mcsi")
         .join("client")
         .join("manifest.json");
-    let manifest_contents = std::fs::read_to_string(flame_manifest_path)?;
+    let manifest_contents = std::fs::read_to_string(client_manifest_path)?;
     let flame_manifest: ClientManifest = serde_json::from_str(manifest_contents.as_str())?;
 
     let mc_version = McVersion::from_str(&flame_manifest.minecraft.version)?;
@@ -295,16 +303,20 @@ async fn download_client(ctx: &mut Context) -> anyhow::Result<()> {
 
     let file_path = download_file(&client_file.download_url, PathBuf::from("./.mcsi/").join(client_file.file_name))
         .await?;
-    let file = std::fs::File::open(file_path)?;
-    let mut archive = zip::ZipArchive::new(file)?;
+    {
+        let file = File::open(&file_path)?;
+        let mut archive = zip::ZipArchive::new(file)?;
 
-    let client_path = PathBuf::from("./.mcsi")
-        .join("client");
-    if client_path.exists() {
-        std::fs::remove_dir_all(&client_path)?;
+        let client_path = PathBuf::from("./.mcsi")
+            .join("client");
+        if client_path.exists() {
+            remove_dir_all(&client_path)?;
+        }
+        create_dir(&client_path)?;
+        archive.extract(&client_path)?;
     }
-    std::fs::create_dir(&client_path)?;
-    archive.extract(&client_path)?;
+
+    remove_file(file_path)?;
 
     Ok(())
 }
@@ -316,18 +328,24 @@ async fn download_server(ctx: &mut Context) -> anyhow::Result<()> {
         return Ok(())
     };
 
-    let file_pack = download_file(&server_pack.download_url, PathBuf::from("./.mcsi/").join(server_pack.file_name))
+    let file_path = download_file(&server_pack.download_url, PathBuf::from("./.mcsi/").join(server_pack.file_name))
         .await?;
     let file = std::fs::File::open(file_pack)?;
     let mut archive = zip::ZipArchive::new(file)?;
+    {
+        let file = File::open(&file_path)?;
+        let mut archive = zip::ZipArchive::new(file)?;
 
-    let server_path = PathBuf::from("./.mcsi")
-        .join("server");
-    if server_path.exists() {
-        std::fs::remove_dir_all(&server_path)?;
+        let server_path = PathBuf::from("./.mcsi")
+            .join("server");
+        if server_path.exists() {
+            remove_dir_all(&server_path)?;
+        }
+        create_dir(&server_path)?;
+        archive.extract(&server_path)?;
     }
-    std::fs::create_dir(&server_path)?;
-    archive.extract(&server_path)?;
+
+    remove_file(file_path)?;
 
     Ok(())
 }

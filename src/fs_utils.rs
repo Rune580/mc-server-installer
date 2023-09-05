@@ -52,6 +52,22 @@ pub async fn recursive_copy_to_dir<TSrc: AsRef<Path>, TDst: AsRef<Path>>(src_dir
     Ok(())
 }
 
+pub fn file_path_relative_to<TFile: AsRef<Path>, TDir: AsRef<Path>>(file: TFile, dir: TDir) -> anyhow::Result<PathBuf> {
+    let file = file.as_ref();
+    let dir = dir.as_ref();
+
+    let relative = file.canonicalize()?;
+    let mut relative = relative.to_str().unwrap().replace(dir.to_str().unwrap(), "");
+    if relative.starts_with("/") {
+        relative.remove(0);
+    } else if relative.starts_with("\\") {
+        relative.remove(0);
+    }
+    let relative = PathBuf::from(relative);
+    
+    Ok(relative)
+}
+
 pub async fn download_file<T: AsRef<Path>>(url: &str, dst: T) -> anyhow::Result<PathBuf> {
     let file_name = dst.as_ref().file_name().unwrap().to_str().unwrap().to_string();
     let file_path = dst.as_ref();
