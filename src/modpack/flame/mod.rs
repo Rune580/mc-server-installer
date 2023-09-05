@@ -1,3 +1,5 @@
+use std::fs::{create_dir, File, remove_dir_all, remove_file};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use log::{debug, error, info};
@@ -9,6 +11,7 @@ use crate::fs_utils::{download_file, file_path_relative_to, get_closest_common_p
 use crate::modloader::fabric::install_fabric;
 use crate::modloader::forge::install_forge;
 use crate::modloader::ModLoader;
+use crate::modpack::flame::manifest::FlameManifest;
 use crate::modpack::flame::model::{ClientManifest, FileEntry, ManifestFileEntry};
 use crate::version::McVersion;
 
@@ -261,11 +264,42 @@ async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
 }
 
 async fn post_process(ctx: &mut Context) -> anyhow::Result<()> {
-    info!("Cleaning up...");
+    info!("Finishing up...");
     let work_dir = work_dir();
 
-    recursive_copy_to_dir(work_dir, &ctx.target_dir)
+    let mut files = Vec::new();
+    for entry in WalkDir::new(&work_dir) {
+        let entry = entry?;
+        if entry.path().is_dir() {
+            continue;
+        }
+
+        let relative = file_path_relative_to(&entry.path(), &work_dir)?;
+        files.push(String::from(relative.to_str().unwrap()))
+    }
+
+    recursive_copy_to_dir(&work_dir, &ctx.target_dir)
         .await?;
+
+    let mcsi_dir = work_dir
+        .join(".mcsi");
+    if !mcsi_dir.is_dir() {
+        remove_dir_all(PathBuf::from("./.mcsi"))?;
+        create_dir(&mcsi_dir)?;
+    }
+    let flame_manifest_path = mcsi_dir
+        .join("flame.json");
+    if flame_manifest_path.is_file() {
+        remove_file(&flame_manifest_path)?;
+    }
+
+    let flame_manifest = FlameManifest {
+        files,
+    };
+
+    let bytes = serde_json::to_vec_pretty(&flame_manifest)?;
+    let mut flame_manifest_file = File::create(flame_manifest_path)?;
+    flame_manifest_file.write_all(&bytes)?;
 
     info!("Server is installed!");
     Ok(())
@@ -330,8 +364,6 @@ async fn download_server(ctx: &mut Context) -> anyhow::Result<()> {
 
     let file_path = download_file(&server_pack.download_url, PathBuf::from("./.mcsi/").join(server_pack.file_name))
         .await?;
-    let file = std::fs::File::open(file_pack)?;
-    let mut archive = zip::ZipArchive::new(file)?;
     {
         let file = File::open(&file_path)?;
         let mut archive = zip::ZipArchive::new(file)?;

@@ -57,7 +57,7 @@ pub fn file_path_relative_to<TFile: AsRef<Path>, TDir: AsRef<Path>>(file: TFile,
     let dir = dir.as_ref();
 
     let relative = file.canonicalize()?;
-    let mut relative = relative.to_str().unwrap().replace(dir.to_str().unwrap(), "");
+    let mut relative = relative.to_str().unwrap().replace(dir.canonicalize()?.to_str().unwrap(), "");
     if relative.starts_with("/") {
         relative.remove(0);
     } else if relative.starts_with("\\") {
