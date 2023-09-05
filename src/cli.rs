@@ -3,11 +3,11 @@ use clap::{command, Subcommand, Parser};
 #[derive(Parser, Clone, Debug)]
 pub struct Cli {
     #[command(subcommand)]
-    pub modpack: ModPack,
+    pub sub_command: CliSubCommand,
 }
 
 #[derive(Clone, Debug, Subcommand)]
-pub enum ModPack {
+pub enum CliSubCommand {
     Flame {
         #[clap(env, long)]
         api_key: String,
@@ -18,4 +18,20 @@ pub enum ModPack {
         #[clap(env, long)]
         target_dir: String,
     },
+    Forge {
+        #[clap(env, long)]
+        mc_version: String,
+        #[clap(env, long)]
+        version: String,
+        #[clap(env, long)]
+        target_dir: String,
+    },
+    Fabric {
+        #[clap(env, long)]
+        mc_version: String,
+        #[clap(env, long)]
+        version: String,
+        #[clap(env, long)]
+        target_dir: String,
+    }
 }

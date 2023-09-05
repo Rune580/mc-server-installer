@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fs::create_dir_all;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use futures_util::StreamExt;
@@ -156,6 +157,16 @@ pub async fn get_closest_common_parent<T: AsRef<Path>>(dir: T) -> anyhow::Result
     let common_dir = PathBuf::from(&common.path);
 
     Ok(common_dir)
+}
+
+pub fn ensure_dir<T: AsRef<Path>>(dir: T) -> anyhow::Result<()> {
+    let dir = dir.as_ref();
+
+    if !dir.is_dir() {
+        create_dir_all(dir)?;
+    }
+
+    Ok(())
 }
 
 pub fn work_dir() -> PathBuf {
