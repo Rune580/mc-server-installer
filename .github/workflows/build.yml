@@ -1,11 +1,11 @@
-name: Rust
+name: Build
 
 on:
   workflow_dispatch:
   push:
-    branches: [ "release" ]
+    branches: [ "release", "master" ]
   pull_request:
-    branches: [ "release" ]
+    branches: [ "release", "master" ]
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,6 +13,8 @@ env:
 jobs:
   release:
     name: Release - ${{ matrix.platform.os_name }}
+    permissions:
+      contents: write
     strategy:
       matrix:
         platform:
@@ -48,4 +50,5 @@ jobs:
       uses: actions/upload-artifact@v3.1.2
       with:
         name: ${{ matrix.platform.os_name }}
-        path: target/${{ matrix.platform.target }}/release/${{ matrix.platform.binary }}
+        path: target/${{ matrix.platform.target }}/release/${{ matrix.platform.binary }}    
+        
