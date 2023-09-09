@@ -3,9 +3,9 @@ name: Build
 on:
   workflow_dispatch:
   push:
-    branches: [ "release", "master" ]
+    branches: [ "master" ]
   pull_request:
-    branches: [ "release", "master" ]
+    branches: [ "release" ]
 
 env:
   CARGO_TERM_COLOR: always
@@ -50,5 +50,4 @@ jobs:
       uses: actions/upload-artifact@v3.1.2
       with:
         name: ${{ matrix.platform.os_name }}
-        path: target/${{ matrix.platform.target }}/release/${{ matrix.platform.binary }}    
-        
+        path: target/${{ matrix.platform.target }}/release/${{ matrix.platform.binary }}
