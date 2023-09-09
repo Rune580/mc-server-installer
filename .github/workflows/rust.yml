@@ -19,10 +19,12 @@ jobs:
           - os_name: Linux-x86_64
             os: ubuntu-20.04
             target: x86_64-unknown-linux-gnu
+            binary: mc-server-installer
             
           - os_name: Windows-x86_64
             os: windows-latest
             target: x86_64-pc-windows-msvc
+            binary: mc-server-installer.exe
 
     runs-on: ${{ matrix.platform.os }}
     
@@ -41,15 +43,9 @@ jobs:
       with:
         command: build
         args: --release --target ${{ matrix.platform.target }}
-  
-    - name: package build
-      uses: TheDoctor0/zip-release@0.7.1
-      with:
-        filename: ${{ matrix.platform.os_name }}.zip
-        path: target/${{ matrix.platform.target }}/release
 
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v3.1.2
       with:
         name: ${{ matrix.platform.os_name }}
-        path: ${{ matrix.platform.os_name }}.zip
+        path: target/${{ matrix.platform.target }}/release/${{ matrix.platform.binary }}
