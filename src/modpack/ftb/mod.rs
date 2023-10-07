@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use log::{debug, error, info};
+use log::{error, info};
 use thiserror::Error;
 use tokio::fs::{create_dir_all, remove_dir_all};
 use crate::fs_utils::{download_file, work_dir};
@@ -67,7 +67,7 @@ async fn resolve_pack_id(ctx: &mut Context) -> anyhow::Result<()> {
         IdOrSearch::Id(id) => id.parse::<usize>().unwrap(),
         IdOrSearch::Search {
             terms,
-            mc_version
+            mc_version: _
         } => {
             info!("Searching for best matching pack...");
             let results = ctx.client.search(terms)

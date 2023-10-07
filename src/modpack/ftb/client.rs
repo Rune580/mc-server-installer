@@ -1,4 +1,3 @@
-use log::debug;
 use reqwest::Client;
 use reqwest::header::HeaderMap;
 use crate::modpack::ftb::model::{PackDetails, SearchResults};

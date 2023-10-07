@@ -158,7 +158,7 @@ async fn ensure_server_pack(ctx: &mut Context) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn setup(ctx: &mut Context) -> anyhow::Result<()> {
+async fn setup(_ctx: &mut Context) -> anyhow::Result<()> {
     let dir = PathBuf::from(".mcsi");
     if !dir.exists() {
         std::fs::create_dir(dir)?;

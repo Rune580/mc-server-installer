@@ -9,18 +9,18 @@ use walkdir::WalkDir;
 
 pub async fn recursive_copy_to_dir<TSrc: AsRef<Path>, TDst: AsRef<Path>>(src_dir: TSrc, dst_dir: TDst) -> anyhow::Result<()> {
     let src_dir = src_dir.as_ref();
-    let dst_dir = dst_dir.as_ref().clone().to_str().unwrap();
+    let dst_dir = dst_dir.as_ref().to_str().unwrap();
 
     debug!("copying files from \'{src_dir:#?}\' to \'{dst_dir:#?}\'");
 
-    let root = src_dir.clone().canonicalize()?;
+    let root = src_dir.canonicalize()?;
 
     for entry in WalkDir::new(src_dir) {
         let entry = entry?;
         if entry.path().is_dir() {
             continue;
         }
-        let relative = entry.path().clone().canonicalize()?;
+        let relative = entry.path().canonicalize()?;
         let mut relative = relative.to_str().unwrap().replace(root.to_str().unwrap(), "");
         if relative.starts_with("/") {
             relative.remove(0);

@@ -1,5 +1,4 @@
 use clap::{command, Subcommand, Parser};
-use clap::builder::ValueParser;
 
 #[derive(Parser, Clone, Debug)]
 pub struct Cli {

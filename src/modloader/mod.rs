@@ -23,7 +23,7 @@ impl FromStr for ModLoader {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.contains("forge") {
-            let forge_version = s.clone()
+            let forge_version = s
                 .split("-")
                 .last()
                 .ok_or(ModLoaderParseError::InvalidInput)?;
@@ -32,7 +32,7 @@ impl FromStr for ModLoader {
                 version: forge_version.to_string()
             })
         } else if s.contains("fabric") {
-            let fabric_version = s.clone()
+            let fabric_version = s
                 .split("-")
                 .last()
                 .ok_or(ModLoaderParseError::InvalidInput)?;
@@ -41,7 +41,7 @@ impl FromStr for ModLoader {
                 version: fabric_version.to_string()
             })
         } else if s.contains("quilt") {
-            Ok(ModLoader::Quilt { version: s.clone().to_string() })
+            Ok(ModLoader::Quilt { version: s.to_string() })
         } else {
             Err(ModLoaderParseError::InvalidInput)
         }
