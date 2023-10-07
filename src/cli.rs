@@ -1,4 +1,5 @@
 use clap::{command, Subcommand, Parser};
+use clap::builder::ValueParser;
 
 #[derive(Parser, Clone, Debug)]
 pub struct Cli {
@@ -13,6 +14,18 @@ pub enum CliSubCommand {
         api_key: String,
         #[clap(env, long)]
         project_id: u64,
+        #[clap(env, long)]
+        version: String,
+        #[clap(env, long)]
+        target_dir: String,
+    },
+    Ftb {
+        #[clap(env, long,  required_unless_present="id", conflicts_with="id")]
+        search_terms: Option<Vec<String>>,
+        #[clap(env, long, required_unless_present="search_terms")]
+        id: Option<String>,
+        #[clap(env, long, requires="search_terms")]
+        mc_version: Option<String>,
         #[clap(env, long)]
         version: String,
         #[clap(env, long)]

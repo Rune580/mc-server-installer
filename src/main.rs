@@ -7,6 +7,7 @@ use cli::Cli;
 use crate::fs_utils::ensure_dir;
 use crate::modloader::fabric::install_fabric;
 use crate::modloader::forge::install_forge;
+use crate::modpack::ftb::IdOrSearch;
 use crate::version::McVersion;
 
 mod cli;
@@ -34,6 +35,25 @@ async fn main() -> anyhow::Result<()> {
             version,
             target_dir,
         } => modpack::flame::handle_flame(api_key, project_id, version, target_dir).await?,
+        cli::CliSubCommand::Ftb {
+            search_terms,
+            mc_version,
+            id,
+            version,
+            target_dir,
+        } => {
+            let args = if id.is_some() {
+                IdOrSearch::Id(id.unwrap())
+            } else {
+                IdOrSearch::Search {
+                    terms: search_terms.unwrap(),
+                    mc_version,
+                }
+            };
+
+            modpack::ftb::handle_ftb(args, version, target_dir)
+                .await?;
+        }
         cli::CliSubCommand::Forge {
             mc_version,
             version,

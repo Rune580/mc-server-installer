@@ -1,6 +1,5 @@
 use reqwest::Client;
 use serde::de::DeserializeOwned;
-use serde::Deserialize;
 use crate::modpack::flame::model::{FileEntry, FilesList};
 
 use super::model::ModInfo;
