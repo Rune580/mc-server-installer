@@ -1,14 +1,15 @@
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use async_process::Command;
-use futures_util::{AsyncBufReadExt, StreamExt};
+use chrono::Utc;
+use futures_util::{AsyncBufReadExt, io, StreamExt};
 use futures_util::io::BufReader;
 use indicatif::ProgressBar;
 use log::{error, info};
 use thiserror::Error;
-use tokio::fs::{create_dir, remove_dir_all, remove_file};
+use tokio::fs::{create_dir, create_dir_all, remove_dir_all, remove_file};
 use crate::cli;
-use crate::fs_utils::{download_file, recursive_copy_to_dir, work_dir};
+use crate::fs_utils::{backup_and_remove_files, download_file, recursive_copy_to_dir, work_dir};
 use crate::modpack::ftb::client::FtbClient;
 use crate::modpack::PackManifest;
 
@@ -50,12 +51,41 @@ pub async fn handle_ftb<T: AsRef<Path>>(
         target_dir: target_dir.as_ref().to_path_buf(),
     };
 
+    check_manifest(&mut ctx).await?;
     setup()?;
     resolve_pack_id(&mut ctx).await?;
     resolve_version_id(&mut ctx).await?;
     download_server_installer(&mut ctx).await?;
     install_server(&mut ctx).await?;
     post_process(&mut ctx).await?;
+
+    Ok(())
+}
+
+async fn check_manifest(ctx: &mut Context) -> anyhow::Result<()> {
+    let mcsi_dir = ctx.target_dir
+        .join(".mcsi");
+
+    let manifest_path = mcsi_dir
+        .join("ftb.json");
+
+    if !manifest_path.is_file() {
+        return Ok(());
+    }
+
+    let manifest = PackManifest::load_from(&manifest_path)?;
+    info!("Existing pack manifest found!");
+
+    let now = Utc::now().format("%Y-%m-%d-%H%M%S").to_string();
+    let backup_dir = mcsi_dir
+        .join("backups")
+        .join(format!("backup-{now}"));
+
+    create_dir_all(&backup_dir)
+        .await?;
+
+    backup_and_remove_files(&ctx.target_dir, backup_dir, manifest.files)
+        .await?;
 
     Ok(())
 }
@@ -156,6 +186,12 @@ async fn install_server(ctx: &mut Context) -> anyhow::Result<()> {
             install_progress.set_message(line);
         }
     }
+
+    let wait = async move {
+        child.status().await?;
+        io::Result::Ok(false)
+    };
+    wait.await?;
 
     install_progress.finish();
     remove_file(installer)

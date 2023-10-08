@@ -59,6 +59,11 @@ pub fn copy_progress_style() -> ProgressStyle {
         .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ")
 }
 
+pub fn backup_progress_style() -> ProgressStyle {
+    ProgressStyle::with_template("{bar:40.cyan/blue} [Eta: {eta}]\n[{pos}/{len}] {wide_msg}")
+        .unwrap()
+}
+
 pub fn spinner_progress_style() -> ProgressStyle {
     ProgressStyle::with_template("{spinner} {prefix} {elapsed}\n{wide_msg}")
         .unwrap()

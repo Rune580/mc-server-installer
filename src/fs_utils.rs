@@ -1,9 +1,9 @@
 use std::collections::HashMap;
-use std::fs::create_dir_all;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use futures_util::StreamExt;
 use indicatif::ProgressBar;
+use tokio::fs::{create_dir_all, read, remove_dir, remove_file, write};
 use tokio::io::AsyncWriteExt;
 use walkdir::WalkDir;
 use crate::cli;
@@ -37,7 +37,8 @@ pub async fn recursive_copy_to_dir<TSrc: AsRef<Path>, TDst: AsRef<Path>>(src_dir
 
         if let Some(parent) = dst.parent() {
             if !parent.exists() {
-                create_dir_all(parent)?;
+                create_dir_all(parent)
+                    .await?;
             }
         }
 
@@ -56,6 +57,56 @@ pub async fn recursive_copy_to_dir<TSrc: AsRef<Path>, TDst: AsRef<Path>>(src_dir
     }
 
     copy_bar.finish();
+
+    Ok(())
+}
+
+pub async fn backup_and_remove_files<TSrc: AsRef<Path>, TDst: AsRef<Path>>(
+    src_dir: TSrc,
+    backup_dir: TDst,
+    rel_files: Vec<String>,
+) -> anyhow::Result<()> {
+    let src_dir = src_dir.as_ref();
+    let backup_dir = backup_dir.as_ref();
+
+    if !backup_dir.is_dir() {
+        create_dir_all(&backup_dir)
+            .await?;
+    }
+
+    println!("Starting backup of files...");
+    let backup_bar = ProgressBar::new(rel_files.len() as u64)
+        .with_style(cli::backup_progress_style());
+
+    for rel_file in rel_files {
+        let src_file = PathBuf::from(&src_dir)
+            .join(&rel_file);
+        let dst_file = PathBuf::from(&backup_dir)
+            .join(&rel_file);
+
+        backup_bar.set_message(rel_file);
+
+        ensure_parent(&dst_file)
+            .await?;
+
+        let bytes = read(&src_file)
+            .await?;
+        write(dst_file, bytes)
+            .await?;
+
+        let src_parent_dir = src_file.parent();
+        remove_file(&src_file)
+            .await?;
+        if src_parent_dir.is_some() {
+            let src_parent_dir = src_parent_dir.unwrap();
+            let _ = remove_dir(src_parent_dir)
+                .await;
+        }
+
+        backup_bar.inc(1);
+    }
+
+    backup_bar.finish();
 
     Ok(())
 }
@@ -160,7 +211,20 @@ pub fn ensure_dir<T: AsRef<Path>>(dir: T) -> anyhow::Result<()> {
     let dir = dir.as_ref();
 
     if !dir.is_dir() {
-        create_dir_all(dir)?;
+        std::fs::create_dir_all(dir)?;
+    }
+
+    Ok(())
+}
+
+pub async fn ensure_parent<T: AsRef<Path>>(path: T) -> anyhow::Result<()> {
+    let path = path.as_ref();
+
+    if let Some(parent) = path.parent() {
+        if !parent.is_dir() {
+            create_dir_all(parent)
+                .await?;
+        }
     }
 
     Ok(())
