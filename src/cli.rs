@@ -1,4 +1,5 @@
 use clap::{command, Subcommand, Parser};
+use indicatif::ProgressStyle;
 
 #[derive(Parser, Clone, Debug)]
 pub struct Cli {
@@ -46,4 +47,8 @@ pub enum CliSubCommand {
         #[clap(env, long)]
         target_dir: String,
     }
+}
+
+pub fn download_progress_style() -> ProgressStyle {
+    ProgressStyle::with_template("[File: {msg}]\n{bar:40.cyan/blue} {percent}% [{bytes} / {total_bytes}] [Eta: {eta}]").unwrap()
 }

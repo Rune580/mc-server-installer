@@ -3,9 +3,11 @@ use std::fs::create_dir_all;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use futures_util::StreamExt;
+use indicatif::{ProgressBar, ProgressStyle};
 use log::{debug, info};
 use tokio::io::AsyncWriteExt;
 use walkdir::WalkDir;
+use crate::cli;
 
 pub async fn recursive_copy_to_dir<TSrc: AsRef<Path>, TDst: AsRef<Path>>(src_dir: TSrc, dst_dir: TDst) -> anyhow::Result<()> {
     let src_dir = src_dir.as_ref();
@@ -83,35 +85,25 @@ pub async fn download_file<T: AsRef<Path>>(url: &str, dst: T) -> anyhow::Result<
     let resp = reqwest::get(url)
         .await?;
 
-    let total_bytes = resp.content_length();
-    let mut bytes: u64 = 0;
-    let mut last_increment = 0;
+    let total_bytes = resp.content_length().unwrap();
+    let download_bar = ProgressBar::new(total_bytes)
+        .with_style(cli::download_progress_style())
+        .with_message(file_name.clone());
 
     let mut stream = resp.bytes_stream();
     while let Some(chunk_result) = stream.next().await {
         let chunk = chunk_result?;
+        let chunk_len = chunk.len() as u64;
 
-        bytes += chunk.len() as u64;
 
         file.write_all(&chunk).await?;
 
-        match total_bytes {
-            Some(total) => {
-                let increment = bytes / (total / 20);
-                if increment >= last_increment {
-                    let percent = ((increment as f64 / 20f64) * 100f64).floor() as u64;
-                    info!("Downloading {0}, {1} bytes of {2} received, {3}%", file_name, bytes, total, percent);
-                    last_increment = increment + 1;
-                }
-            }
-            None => {
-                info!("{0} bytes received", bytes);
-            }
-        }
+        download_bar.inc(chunk_len);
     }
 
     file.flush().await?;
-    println!("Downloaded {0}", file_name);
+
+    download_bar.finish();
 
     Ok(file_path.to_path_buf())
 }
