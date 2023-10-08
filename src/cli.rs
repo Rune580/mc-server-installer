@@ -52,3 +52,15 @@ pub enum CliSubCommand {
 pub fn download_progress_style() -> ProgressStyle {
     ProgressStyle::with_template("[File: {msg}]\n{bar:40.cyan/blue} {percent}% [{bytes} / {total_bytes}] [Eta: {eta}]").unwrap()
 }
+
+pub fn copy_progress_style() -> ProgressStyle {
+    ProgressStyle::with_template("{prefix.bold.dim} {spinner} {msg} {elapsed}")
+        .unwrap()
+        .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ")
+}
+
+pub fn spinner_progress_style() -> ProgressStyle {
+    ProgressStyle::with_template("{spinner} {prefix} {elapsed}\n{wide_msg}")
+        .unwrap()
+        .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ")
+}

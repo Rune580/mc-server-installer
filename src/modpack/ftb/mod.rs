@@ -1,10 +1,16 @@
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::Stdio;
+use async_process::Command;
+use futures_util::{AsyncBufReadExt, StreamExt};
+use futures_util::io::BufReader;
+use indicatif::ProgressBar;
 use log::{error, info};
 use thiserror::Error;
-use tokio::fs::{create_dir_all, remove_dir_all};
-use crate::fs_utils::{download_file, work_dir};
+use tokio::fs::{create_dir, remove_dir_all, remove_file};
+use crate::cli;
+use crate::fs_utils::{download_file, recursive_copy_to_dir, work_dir};
 use crate::modpack::ftb::client::FtbClient;
+use crate::modpack::PackManifest;
 
 mod model;
 mod client;
@@ -49,6 +55,7 @@ pub async fn handle_ftb<T: AsRef<Path>>(
     resolve_version_id(&mut ctx).await?;
     download_server_installer(&mut ctx).await?;
     install_server(&mut ctx).await?;
+    post_process(&mut ctx).await?;
 
     Ok(())
 }
@@ -108,17 +115,11 @@ async fn resolve_version_id(ctx: &mut Context) -> anyhow::Result<()> {
 }
 
 async fn download_server_installer(ctx: &mut Context) -> anyhow::Result<()> {
-    let work_dir = work_dir();
-    if !work_dir.is_dir() {
-        create_dir_all(&work_dir)
-            .await?;
-    }
-
     let pack_id = ctx.pack_id.unwrap();
     let version_id = ctx.version_id.unwrap();
 
     let url = format!("https://api.modpacks.ch/public/modpack/{pack_id}/{version_id}/server/{TARGET_OS}");
-    let dst = work_dir
+    let dst = PathBuf::from("./.mcsi")
         .join(installer_file_name(pack_id, version_id));
 
     info!("downloading installer...");
@@ -132,29 +133,69 @@ async fn download_server_installer(ctx: &mut Context) -> anyhow::Result<()> {
 
 async fn install_server(ctx: &mut Context) -> anyhow::Result<()> {
     let work_dir = work_dir();
-    let server_dir = PathBuf::from(".mcsi")
-        .join("server");
-
-    if server_dir.is_dir() {
-        remove_dir_all(&server_dir)
+    if work_dir.is_dir() {
+        remove_dir_all(&work_dir)
             .await?;
     }
 
     let installer = ctx.installer_path.clone().unwrap();
 
-    info!("Installing server, this may take a few minutes...");
-    let output = Command::new(installer)
-        .current_dir(&work_dir)
-        .args(["--auto", "--path", "../server", "--nojava"])
-        .output()?;
+    let install_progress = ProgressBar::new_spinner()
+        .with_style(cli::spinner_progress_style())
+        .with_prefix("Running FTB installer");
 
-    if !output.status.success() {
-        error!("Failed to install ftb server! \nCode:\t{:#?}\nOutput:\n{:#?}", output.status.code(), output);
-        return Err(FtbError::InstallerError)?;
+    let mut child = Command::new(installer.clone())
+        .current_dir(PathBuf::from("./.mcsi"))
+        .args(["--auto", "--path", "./work_dir", "--nojava"])
+        .stdout(Stdio::piped())
+        .spawn()?;
+
+    let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
+    while let Some(line) = lines.next().await {
+        if let Ok(line) = line {
+            install_progress.set_message(line);
+        }
     }
 
-    info!("Ftb installer finished!");
+    install_progress.finish();
+    remove_file(installer)
+        .await?;
 
+    Ok(())
+}
+
+async fn post_process(ctx: &mut Context) -> anyhow::Result<()> {
+    info!("Finishing up...");
+    let work_dir = work_dir();
+
+    recursive_copy_to_dir(&work_dir, &ctx.target_dir)
+        .await?;
+
+    remove_dir_all(&work_dir)
+        .await?;
+
+    let mcsi_dir = ctx.target_dir
+        .join(".mcsi");
+
+    // Check if mcsi dir is in the target dir, this can happen if the target_dir is the same as our working dir or if there was a previous install
+    if !mcsi_dir.is_dir() {
+        remove_dir_all(PathBuf::from("./.mcsi"))
+            .await?;
+        create_dir(&mcsi_dir)
+            .await?;
+    }
+
+    let ftb_manifest_path = mcsi_dir
+        .join("ftb.json");
+
+    let pack_manifest = PackManifest::builder()
+        .with_files_from_dir(&ctx.target_dir)
+        .exclude_files_from_dir(".mcsi/")
+        .finish();
+
+    pack_manifest.save_to(ftb_manifest_path)?;
+
+    info!("Server is installed!");
     Ok(())
 }
 

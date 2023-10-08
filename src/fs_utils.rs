@@ -3,8 +3,7 @@ use std::fs::create_dir_all;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use futures_util::StreamExt;
-use indicatif::{ProgressBar, ProgressStyle};
-use log::{debug, info};
+use indicatif::ProgressBar;
 use tokio::io::AsyncWriteExt;
 use walkdir::WalkDir;
 use crate::cli;
@@ -13,10 +12,12 @@ pub async fn recursive_copy_to_dir<TSrc: AsRef<Path>, TDst: AsRef<Path>>(src_dir
     let src_dir = src_dir.as_ref();
     let dst_dir = dst_dir.as_ref().to_str().unwrap();
 
-    debug!("copying files from \'{src_dir:#?}\' to \'{dst_dir:#?}\'");
+    println!("Copying files...");
+    let copy_bar = ProgressBar::new_spinner()
+        .with_style(cli::copy_progress_style());
 
     let root = src_dir.canonicalize()?;
-
+    let mut count = 0;
     for entry in WalkDir::new(src_dir) {
         let entry = entry?;
         if entry.path().is_dir() {
@@ -32,15 +33,17 @@ pub async fn recursive_copy_to_dir<TSrc: AsRef<Path>, TDst: AsRef<Path>>(src_dir
         let relative = PathBuf::from(relative);
 
         let dst = PathBuf::from(dst_dir)
-            .join(relative);
+            .join(&relative);
 
         if let Some(parent) = dst.parent() {
             if !parent.exists() {
-                std::fs::create_dir_all(parent)?;
+                create_dir_all(parent)?;
             }
         }
 
-        debug!("Copy file from {0} to {1}", entry.path().display(), dst.display());
+        count += 1;
+        copy_bar.set_prefix(format!("[{}/?]", count));
+        copy_bar.set_message(String::from(relative.to_str().unwrap()));
 
         if dst.is_file() {
             std::fs::remove_file(&dst)?;
@@ -51,6 +54,8 @@ pub async fn recursive_copy_to_dir<TSrc: AsRef<Path>, TDst: AsRef<Path>>(src_dir
 
         dst_file.write_all(&bytes)?;
     }
+
+    copy_bar.finish();
 
     Ok(())
 }
