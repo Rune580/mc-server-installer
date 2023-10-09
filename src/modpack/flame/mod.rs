@@ -1,17 +1,15 @@
-use std::fs::{create_dir, File, remove_dir_all, remove_file};
-use std::io::Write;
+use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use log::{debug, error, info};
 use reqwest::{Client, header::HeaderMap};
 use thiserror::Error;
-use tokio::fs::create_dir_all;
-use walkdir::WalkDir;
-use crate::fs_utils::{download_file, file_path_relative_to, get_closest_common_parent, recursive_copy_to_dir, work_dir};
+use tokio::fs::{create_dir, create_dir_all, remove_dir_all, remove_file};
+use crate::fs_utils::{download_file, get_closest_common_parent, recursive_copy_to_dir, work_dir};
 use crate::modloader::fabric::install_fabric;
 use crate::modloader::forge::install_forge;
 use crate::modloader::ModLoader;
-use crate::modpack::flame::manifest::FlameManifest;
+use crate::modpack::check_manifest;
 use crate::modpack::flame::model::{ClientManifest, FileEntry, ManifestFileEntry};
 use crate::version::McVersion;
 
@@ -19,7 +17,6 @@ use self::client::FlameClient;
 
 mod model;
 mod client;
-mod manifest;
 
 #[derive(Clone, Debug)]
 struct Context {
@@ -62,6 +59,7 @@ pub async fn handle_flame<T: AsRef<Path>>(
         target_dir: target_dir.as_ref().to_path_buf(),
     };
 
+    check_manifest(&ctx.target_dir).await?;
     setup(&mut ctx).await?;
     resolve_main_file(&mut ctx).await?;
     ensure_server_pack(&mut ctx).await?;
@@ -158,7 +156,7 @@ async fn ensure_server_pack(ctx: &mut Context) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn setup(ctx: &mut Context) -> anyhow::Result<()> {
+async fn setup(_ctx: &mut Context) -> anyhow::Result<()> {
     let dir = PathBuf::from(".mcsi");
     if !dir.exists() {
         std::fs::create_dir(dir)?;
@@ -175,9 +173,11 @@ async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
 
     let work_dir = work_dir();
     if work_dir.exists() {
-        remove_dir_all(&work_dir)?;
+        remove_dir_all(&work_dir)
+            .await?;
     }
-    create_dir(&work_dir)?;
+    create_dir(&work_dir)
+        .await?;
 
     let server_path = PathBuf::from("./.mcsi")
         .join("server");
@@ -233,10 +233,12 @@ async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
     }
 
     if server_path.is_dir() {
-        remove_dir_all(server_path)?;
+        remove_dir_all(server_path)
+            .await?;
     }
     if client_path.is_dir() {
-        remove_dir_all(client_path)?;
+        remove_dir_all(client_path)
+            .await?;
     }
 
     match &ctx.mod_loader.clone().unwrap() {
@@ -265,41 +267,9 @@ async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
 
 async fn post_process(ctx: &mut Context) -> anyhow::Result<()> {
     info!("Finishing up...");
-    let work_dir = work_dir();
 
-    let mut files = Vec::new();
-    for entry in WalkDir::new(&work_dir) {
-        let entry = entry?;
-        if entry.path().is_dir() {
-            continue;
-        }
-
-        let relative = file_path_relative_to(&entry.path(), &work_dir)?;
-        files.push(String::from(relative.to_str().unwrap()))
-    }
-
-    recursive_copy_to_dir(&work_dir, &ctx.target_dir)
+    super::post_process(&ctx.target_dir)
         .await?;
-
-    let mcsi_dir = work_dir
-        .join(".mcsi");
-    if !mcsi_dir.is_dir() {
-        remove_dir_all(PathBuf::from("./.mcsi"))?;
-        create_dir(&mcsi_dir)?;
-    }
-    let flame_manifest_path = mcsi_dir
-        .join("flame.json");
-    if flame_manifest_path.is_file() {
-        remove_file(&flame_manifest_path)?;
-    }
-
-    let flame_manifest = FlameManifest {
-        files,
-    };
-
-    let bytes = serde_json::to_vec_pretty(&flame_manifest)?;
-    let mut flame_manifest_file = File::create(flame_manifest_path)?;
-    flame_manifest_file.write_all(&bytes)?;
 
     info!("Server is installed!");
     Ok(())
@@ -344,13 +314,16 @@ async fn download_client(ctx: &mut Context) -> anyhow::Result<()> {
         let client_path = PathBuf::from("./.mcsi")
             .join("client");
         if client_path.exists() {
-            remove_dir_all(&client_path)?;
+            remove_dir_all(&client_path)
+                .await?;
         }
-        create_dir(&client_path)?;
+        create_dir(&client_path)
+            .await?;
         archive.extract(&client_path)?;
     }
 
-    remove_file(file_path)?;
+    remove_file(file_path)
+        .await?;
 
     Ok(())
 }
@@ -371,13 +344,16 @@ async fn download_server(ctx: &mut Context) -> anyhow::Result<()> {
         let server_path = PathBuf::from("./.mcsi")
             .join("server");
         if server_path.exists() {
-            remove_dir_all(&server_path)?;
+            remove_dir_all(&server_path)
+                .await?;
         }
-        create_dir(&server_path)?;
+        create_dir(&server_path)
+            .await?;
         archive.extract(&server_path)?;
     }
 
-    remove_file(file_path)?;
+    remove_file(file_path)
+        .await?;
 
     Ok(())
 }

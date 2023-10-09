@@ -1,26 +1,29 @@
 use std::collections::HashMap;
-use std::fs::create_dir_all;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use futures_util::StreamExt;
-use log::{debug, info};
+use indicatif::ProgressBar;
+use tokio::fs::{create_dir_all, read, remove_dir, remove_file, write};
 use tokio::io::AsyncWriteExt;
 use walkdir::WalkDir;
+use crate::cli;
 
 pub async fn recursive_copy_to_dir<TSrc: AsRef<Path>, TDst: AsRef<Path>>(src_dir: TSrc, dst_dir: TDst) -> anyhow::Result<()> {
     let src_dir = src_dir.as_ref();
-    let dst_dir = dst_dir.as_ref().clone().to_str().unwrap();
+    let dst_dir = dst_dir.as_ref().to_str().unwrap();
 
-    debug!("copying files from \'{src_dir:#?}\' to \'{dst_dir:#?}\'");
+    println!("Copying files...");
+    let copy_bar = ProgressBar::new_spinner()
+        .with_style(cli::copy_progress_style());
 
-    let root = src_dir.clone().canonicalize()?;
-
+    let root = src_dir.canonicalize()?;
+    let mut count = 0;
     for entry in WalkDir::new(src_dir) {
         let entry = entry?;
         if entry.path().is_dir() {
             continue;
         }
-        let relative = entry.path().clone().canonicalize()?;
+        let relative = entry.path().canonicalize()?;
         let mut relative = relative.to_str().unwrap().replace(root.to_str().unwrap(), "");
         if relative.starts_with("/") {
             relative.remove(0);
@@ -30,15 +33,18 @@ pub async fn recursive_copy_to_dir<TSrc: AsRef<Path>, TDst: AsRef<Path>>(src_dir
         let relative = PathBuf::from(relative);
 
         let dst = PathBuf::from(dst_dir)
-            .join(relative);
+            .join(&relative);
 
         if let Some(parent) = dst.parent() {
             if !parent.exists() {
-                std::fs::create_dir_all(parent)?;
+                create_dir_all(parent)
+                    .await?;
             }
         }
 
-        debug!("Copy file from {0} to {1}", entry.path().display(), dst.display());
+        count += 1;
+        copy_bar.set_prefix(format!("[{}/?]", count));
+        copy_bar.set_message(String::from(relative.to_str().unwrap()));
 
         if dst.is_file() {
             std::fs::remove_file(&dst)?;
@@ -49,6 +55,58 @@ pub async fn recursive_copy_to_dir<TSrc: AsRef<Path>, TDst: AsRef<Path>>(src_dir
 
         dst_file.write_all(&bytes)?;
     }
+
+    copy_bar.finish();
+
+    Ok(())
+}
+
+pub async fn backup_and_remove_files<TSrc: AsRef<Path>, TDst: AsRef<Path>>(
+    src_dir: TSrc,
+    backup_dir: TDst,
+    rel_files: Vec<String>,
+) -> anyhow::Result<()> {
+    let src_dir = src_dir.as_ref();
+    let backup_dir = backup_dir.as_ref();
+
+    if !backup_dir.is_dir() {
+        create_dir_all(&backup_dir)
+            .await?;
+    }
+
+    println!("Starting backup of files...");
+    let backup_bar = ProgressBar::new(rel_files.len() as u64)
+        .with_style(cli::backup_progress_style());
+
+    for rel_file in rel_files {
+        let src_file = PathBuf::from(&src_dir)
+            .join(&rel_file);
+        let dst_file = PathBuf::from(&backup_dir)
+            .join(&rel_file);
+
+        backup_bar.set_message(rel_file);
+
+        ensure_parent(&dst_file)
+            .await?;
+
+        let bytes = read(&src_file)
+            .await?;
+        write(dst_file, bytes)
+            .await?;
+
+        let src_parent_dir = src_file.parent();
+        remove_file(&src_file)
+            .await?;
+        if src_parent_dir.is_some() {
+            let src_parent_dir = src_parent_dir.unwrap();
+            let _ = remove_dir(src_parent_dir)
+                .await;
+        }
+
+        backup_bar.inc(1);
+    }
+
+    backup_bar.finish();
 
     Ok(())
 }
@@ -83,35 +141,25 @@ pub async fn download_file<T: AsRef<Path>>(url: &str, dst: T) -> anyhow::Result<
     let resp = reqwest::get(url)
         .await?;
 
-    let total_bytes = resp.content_length();
-    let mut bytes: u64 = 0;
-    let mut last_increment = 0;
+    let total_bytes = resp.content_length().unwrap();
+    let download_bar = ProgressBar::new(total_bytes)
+        .with_style(cli::download_progress_style())
+        .with_message(file_name.clone());
 
     let mut stream = resp.bytes_stream();
     while let Some(chunk_result) = stream.next().await {
         let chunk = chunk_result?;
+        let chunk_len = chunk.len() as u64;
 
-        bytes += chunk.len() as u64;
 
         file.write_all(&chunk).await?;
 
-        match total_bytes {
-            Some(total) => {
-                let increment = bytes / (total / 20);
-                if increment >= last_increment {
-                    let percent = ((increment as f64 / 20f64) * 100f64).floor() as u64;
-                    info!("Downloading {0}, {1} bytes of {2} received, {3}%", file_name, bytes, total, percent);
-                    last_increment = increment + 1;
-                }
-            }
-            None => {
-                info!("{0} bytes received", bytes);
-            }
-        }
+        download_bar.inc(chunk_len);
     }
 
     file.flush().await?;
-    println!("Downloaded {0}", file_name);
+
+    download_bar.finish();
 
     Ok(file_path.to_path_buf())
 }
@@ -163,7 +211,20 @@ pub fn ensure_dir<T: AsRef<Path>>(dir: T) -> anyhow::Result<()> {
     let dir = dir.as_ref();
 
     if !dir.is_dir() {
-        create_dir_all(dir)?;
+        std::fs::create_dir_all(dir)?;
+    }
+
+    Ok(())
+}
+
+pub async fn ensure_parent<T: AsRef<Path>>(path: T) -> anyhow::Result<()> {
+    let path = path.as_ref();
+
+    if let Some(parent) = path.parent() {
+        if !parent.is_dir() {
+            create_dir_all(parent)
+                .await?;
+        }
     }
 
     Ok(())

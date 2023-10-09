@@ -1,6 +1,7 @@
 use std::fs::remove_file;
 use std::path::Path;
 use std::process::Command;
+use log::{error, info};
 use crate::fs_utils::download_file;
 use crate::version::McVersion;
 
@@ -22,10 +23,17 @@ pub async fn install_forge<P: AsRef<Path>>(mc_version: McVersion, forge_version:
         .await?;
 
     println!("Installing forge...");
-    Command::new("java")
+    let output = Command::new("java")
         .current_dir(&work_dir)
         .args(["-jar", "installer.jar", "--installServer"])
         .output()?;
+
+    if !output.status.success() {
+        error!("Forge install failed\nCode:\t{:#?}\nOutput:\n{:#?}", output.status.code(), output)
+
+    } else {
+        info!("Forge installed successfully!")
+    }
 
     remove_file(installer_dst)?;
 

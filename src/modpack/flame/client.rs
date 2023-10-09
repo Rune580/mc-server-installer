@@ -1,6 +1,5 @@
 use reqwest::Client;
 use serde::de::DeserializeOwned;
-use serde::Deserialize;
 use crate::modpack::flame::model::{FileEntry, FilesList};
 
 use super::model::ModInfo;
@@ -40,7 +39,7 @@ impl FlameClient {
     }
 
     // TODO: pagination support.
-    pub async fn get_files(&mut self, project_id: u64, page: u32) -> anyhow::Result<FilesList> {
+    pub async fn get_files(&mut self, project_id: u64, _page: u32) -> anyhow::Result<FilesList> {
         let url = format!("https://api.curseforge.com/v1/mods/{0}/files", project_id);
         let resp = self.client.get(url)
             .send().await?
