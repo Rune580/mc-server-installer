@@ -126,7 +126,7 @@ pub async fn check_manifest<T: AsRef<Path>>(target_dir: T) -> anyhow::Result<()>
         return Ok(());
     }
 
-    let manifest = PackManifest::load_from(&manifest_path)?;
+    let manifest = PackManifest::load_from(&mcsi_dir)?;
     info!("Existing pack manifest found!");
 
     let now = Utc::now().format("%Y-%m-%d-%H%M%S").to_string();
