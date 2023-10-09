@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::time::Duration;
 use async_process::Command;
 use chrono::Utc;
 use futures_util::{AsyncBufReadExt, io, StreamExt};
@@ -173,6 +174,8 @@ async fn install_server(ctx: &mut Context) -> anyhow::Result<()> {
     let install_progress = ProgressBar::new_spinner()
         .with_style(cli::spinner_progress_style())
         .with_prefix("Running FTB installer");
+
+    install_progress.enable_steady_tick(Duration::from_millis(500));
 
     let mut child = Command::new(installer.clone())
         .current_dir(PathBuf::from("./.mcsi"))
