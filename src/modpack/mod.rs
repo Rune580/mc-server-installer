@@ -1,10 +1,13 @@
 use std::fs::{File, read, remove_file};
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use chrono::Utc;
+use log::info;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tokio::fs::{create_dir, create_dir_all, remove_dir_all};
 use walkdir::WalkDir;
-use crate::fs_utils::file_path_relative_to;
+use crate::fs_utils::{backup_and_remove_files, file_path_relative_to, recursive_copy_to_dir, work_dir};
 
 pub mod flame;
 pub mod ftb;
@@ -26,9 +29,11 @@ impl PackManifest {
 
     pub fn save_to<T: AsRef<Path>>(
         &self,
-        file_path: T,
+        mcsi_dir: T,
     ) -> anyhow::Result<()> {
-        if file_path.as_ref().is_file() {
+        let file_path = mcsi_dir.as_ref()
+            .join("manifest.json");
+        if file_path.is_file() {
             remove_file(&file_path)?;
         }
 
@@ -40,9 +45,11 @@ impl PackManifest {
     }
 
     pub fn load_from<T: AsRef<Path>>(
-        file_path: T,
+        mcsi_dir: T,
     ) -> anyhow::Result<Self> {
-        if !file_path.as_ref().is_file() {
+        let file_path = mcsi_dir.as_ref()
+            .join("manifest.json");
+        if !file_path.is_file() {
             return Err(ManifestError::ManifestNotFound)?;
         }
 
@@ -105,4 +112,63 @@ impl PackManifestBuilder {
 pub enum ManifestError {
     #[error("The manifest was not found!")]
     ManifestNotFound,
+}
+
+pub async fn check_manifest<T: AsRef<Path>>(target_dir: T) -> anyhow::Result<()> {
+    let target_dir = target_dir.as_ref();
+    let mcsi_dir = target_dir
+        .join(".mcsi");
+
+    let manifest_path = mcsi_dir
+        .join("manifest.json");
+
+    if !manifest_path.is_file() {
+        return Ok(());
+    }
+
+    let manifest = PackManifest::load_from(&manifest_path)?;
+    info!("Existing pack manifest found!");
+
+    let now = Utc::now().format("%Y-%m-%d-%H%M%S").to_string();
+    let backup_dir = mcsi_dir
+        .join("backups")
+        .join(format!("backup-{now}"));
+
+    create_dir_all(&backup_dir)
+        .await?;
+
+    backup_and_remove_files(target_dir, backup_dir, manifest.files)
+        .await?;
+
+    Ok(())
+}
+
+pub async fn post_process<T: AsRef<Path>>(target_dir: T) -> anyhow::Result<()> {
+    let target_dir = target_dir.as_ref();
+    let work_dir = work_dir();
+
+    recursive_copy_to_dir(&work_dir, &target_dir)
+        .await?;
+
+    remove_dir_all(&work_dir)
+        .await?;
+
+    let mcsi_dir = target_dir
+        .join(".mcsi");
+
+    if !mcsi_dir.is_dir() {
+        remove_dir_all(PathBuf::from("./.mcsi"))
+            .await?;
+        create_dir(&mcsi_dir)
+            .await?;
+    }
+
+    let pack_manifest = PackManifest::builder()
+        .with_files_from_dir(&target_dir)
+        .exclude_files_from_dir(".mcsi/")
+        .finish();
+
+    pack_manifest.save_to(mcsi_dir)?;
+
+    Ok(())
 }

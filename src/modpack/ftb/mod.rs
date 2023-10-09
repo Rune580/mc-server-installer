@@ -2,17 +2,16 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 use async_process::Command;
-use chrono::Utc;
 use futures_util::{AsyncBufReadExt, io, StreamExt};
 use futures_util::io::BufReader;
 use indicatif::ProgressBar;
 use log::{error, info};
 use thiserror::Error;
-use tokio::fs::{create_dir, create_dir_all, remove_dir_all, remove_file};
+use tokio::fs::{remove_dir_all, remove_file};
 use crate::cli;
-use crate::fs_utils::{backup_and_remove_files, download_file, recursive_copy_to_dir, work_dir};
+use crate::fs_utils::{download_file, work_dir};
 use crate::modpack::ftb::client::FtbClient;
-use crate::modpack::PackManifest;
+use crate::modpack::check_manifest;
 
 mod model;
 mod client;
@@ -52,7 +51,7 @@ pub async fn handle_ftb<T: AsRef<Path>>(
         target_dir: target_dir.as_ref().to_path_buf(),
     };
 
-    check_manifest(&mut ctx).await?;
+    check_manifest(&ctx.target_dir).await?;
     setup()?;
     resolve_pack_id(&mut ctx).await?;
     resolve_version_id(&mut ctx).await?;
@@ -63,33 +62,7 @@ pub async fn handle_ftb<T: AsRef<Path>>(
     Ok(())
 }
 
-async fn check_manifest(ctx: &mut Context) -> anyhow::Result<()> {
-    let mcsi_dir = ctx.target_dir
-        .join(".mcsi");
 
-    let manifest_path = mcsi_dir
-        .join("ftb.json");
-
-    if !manifest_path.is_file() {
-        return Ok(());
-    }
-
-    let manifest = PackManifest::load_from(&manifest_path)?;
-    info!("Existing pack manifest found!");
-
-    let now = Utc::now().format("%Y-%m-%d-%H%M%S").to_string();
-    let backup_dir = mcsi_dir
-        .join("backups")
-        .join(format!("backup-{now}"));
-
-    create_dir_all(&backup_dir)
-        .await?;
-
-    backup_and_remove_files(&ctx.target_dir, backup_dir, manifest.files)
-        .await?;
-
-    Ok(())
-}
 
 fn setup() -> anyhow::Result<()> {
     let dir = PathBuf::from(".mcsi");
@@ -205,34 +178,9 @@ async fn install_server(ctx: &mut Context) -> anyhow::Result<()> {
 
 async fn post_process(ctx: &mut Context) -> anyhow::Result<()> {
     info!("Finishing up...");
-    let work_dir = work_dir();
 
-    recursive_copy_to_dir(&work_dir, &ctx.target_dir)
+    super::post_process(&ctx.target_dir)
         .await?;
-
-    remove_dir_all(&work_dir)
-        .await?;
-
-    let mcsi_dir = ctx.target_dir
-        .join(".mcsi");
-
-    // Check if mcsi dir is in the target dir, this can happen if the target_dir is the same as our working dir or if there was a previous install
-    if !mcsi_dir.is_dir() {
-        remove_dir_all(PathBuf::from("./.mcsi"))
-            .await?;
-        create_dir(&mcsi_dir)
-            .await?;
-    }
-
-    let ftb_manifest_path = mcsi_dir
-        .join("ftb.json");
-
-    let pack_manifest = PackManifest::builder()
-        .with_files_from_dir(&ctx.target_dir)
-        .exclude_files_from_dir(".mcsi/")
-        .finish();
-
-    pack_manifest.save_to(ftb_manifest_path)?;
 
     info!("Server is installed!");
     Ok(())

@@ -9,15 +9,14 @@ use crate::fs_utils::{download_file, get_closest_common_parent, recursive_copy_t
 use crate::modloader::fabric::install_fabric;
 use crate::modloader::forge::install_forge;
 use crate::modloader::ModLoader;
+use crate::modpack::check_manifest;
 use crate::modpack::flame::model::{ClientManifest, FileEntry, ManifestFileEntry};
-use crate::modpack::PackManifest;
 use crate::version::McVersion;
 
 use self::client::FlameClient;
 
 mod model;
 mod client;
-mod manifest;
 
 #[derive(Clone, Debug)]
 struct Context {
@@ -60,6 +59,7 @@ pub async fn handle_flame<T: AsRef<Path>>(
         target_dir: target_dir.as_ref().to_path_buf(),
     };
 
+    check_manifest(&ctx.target_dir).await?;
     setup(&mut ctx).await?;
     resolve_main_file(&mut ctx).await?;
     ensure_server_pack(&mut ctx).await?;
@@ -267,33 +267,9 @@ async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
 
 async fn post_process(ctx: &mut Context) -> anyhow::Result<()> {
     info!("Finishing up...");
-    let work_dir = work_dir();
 
-    recursive_copy_to_dir(&work_dir, &ctx.target_dir)
+    super::post_process(&ctx.target_dir)
         .await?;
-
-    remove_dir_all(&work_dir)
-        .await?;
-
-    let mcsi_dir = ctx.target_dir
-        .join(".mcsi");
-
-    if !mcsi_dir.is_dir() {
-        remove_dir_all(PathBuf::from("./.mcsi"))
-            .await?;
-        create_dir(&mcsi_dir)
-            .await?;
-    }
-
-    let flame_manifest_path = mcsi_dir
-        .join("flame.json");
-
-    let pack_manifest = PackManifest::builder()
-        .with_files_from_dir(&ctx.target_dir)
-        .exclude_files_from_dir(".mcsi/")
-        .finish();
-
-    pack_manifest.save_to(flame_manifest_path)?;
 
     info!("Server is installed!");
     Ok(())
