@@ -56,6 +56,8 @@ pub async fn handle_ftb<T: AsRef<Path>>(
     resolve_pack_id(&mut ctx).await?;
     resolve_version_id(&mut ctx).await?;
     download_server_installer(&mut ctx).await?;
+    #[cfg(target_os = "linux")]
+    linux_make_installer_executable(&mut ctx).await?;
     install_server(&mut ctx).await?;
     post_process(&mut ctx).await?;
 
@@ -131,6 +133,18 @@ async fn download_server_installer(ctx: &mut Context) -> anyhow::Result<()> {
         .await?;
 
     ctx.installer_path = Some(path.to_str().unwrap().to_string());
+
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+async fn linux_make_installer_executable(ctx: &mut Context) -> anyhow::Result<()> {
+    let installer = ctx.installer_path.clone().unwrap();
+
+    Command::new("chmod")
+        .args(["+x", &installer])
+        .output()
+        .await?;
 
     Ok(())
 }
