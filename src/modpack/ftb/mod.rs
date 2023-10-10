@@ -165,7 +165,7 @@ async fn install_server(ctx: &mut Context) -> anyhow::Result<()> {
     install_progress.enable_steady_tick(Duration::from_millis(500));
 
     let mut child = Command::new(installer.clone())
-        .args(["--auto", "--path", "./work_dir", "--nojava"])
+        .args(["--auto", "--path", "./.mcsi/work_dir", "--nojava"])
         .stdout(Stdio::piped())
         .spawn()?;
 
