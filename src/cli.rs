@@ -6,7 +6,7 @@ use log::LevelFilter;
 pub struct Cli {
     #[command(subcommand)]
     pub sub_command: CliSubCommand,
-    #[clap(env, long, default_value = "Info")]
+    #[clap(env, long, default_value = "info")]
     pub rust_log: LogLevel,
 }
 
