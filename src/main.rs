@@ -1,10 +1,9 @@
 use std::str::FromStr;
 use clap::Parser;
 use dotenv::dotenv;
-use log::LevelFilter;
-use simplelog::{ColorChoice, CombinedLogger, TerminalMode, TermLogger};
+use simplelog::{ColorChoice, CombinedLogger, TerminalMode, TermLogger, WriteLogger};
 use cli::Cli;
-use crate::fs_utils::ensure_dir;
+use crate::fs_utils::{ensure_dir, get_log_file};
 use crate::modloader::fabric::install_fabric;
 use crate::modloader::forge::install_forge;
 use crate::modpack::ftb::IdOrSearch;
@@ -24,7 +23,8 @@ async fn main() -> anyhow::Result<()> {
 
     CombinedLogger::init(
         vec![
-            TermLogger::new(LevelFilter::Info, simplelog::Config::default(), TerminalMode::Mixed, ColorChoice::Auto)
+            TermLogger::new(cli.rust_log.into(), simplelog::Config::default(), TerminalMode::Mixed, ColorChoice::Auto),
+            WriteLogger::new(cli.rust_log.into(), simplelog::Config::default(), get_log_file().unwrap()),
         ]
     )?;
 

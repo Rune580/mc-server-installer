@@ -11,7 +11,7 @@ use tokio::fs::{remove_dir_all, remove_file};
 use crate::cli;
 use crate::fs_utils::{download_file, work_dir};
 use crate::modpack::ftb::client::FtbClient;
-use crate::modpack::check_manifest;
+use crate::modpack::{check_manifest, post_process};
 
 mod model;
 mod client;
@@ -56,8 +56,10 @@ pub async fn handle_ftb<T: AsRef<Path>>(
     resolve_pack_id(&mut ctx).await?;
     resolve_version_id(&mut ctx).await?;
     download_server_installer(&mut ctx).await?;
+    #[cfg(target_os = "linux")]
+    linux_make_installer_executable(&mut ctx).await?;
     install_server(&mut ctx).await?;
-    post_process(&mut ctx).await?;
+    post_process(&ctx.target_dir).await?;
 
     Ok(())
 }
@@ -135,6 +137,18 @@ async fn download_server_installer(ctx: &mut Context) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
+async fn linux_make_installer_executable(ctx: &mut Context) -> anyhow::Result<()> {
+    let installer = ctx.installer_path.clone().unwrap();
+
+    Command::new("chmod")
+        .args(["+x", &installer])
+        .output()
+        .await?;
+
+    Ok(())
+}
+
 async fn install_server(ctx: &mut Context) -> anyhow::Result<()> {
     let work_dir = work_dir();
     if work_dir.is_dir() {
@@ -151,8 +165,7 @@ async fn install_server(ctx: &mut Context) -> anyhow::Result<()> {
     install_progress.enable_steady_tick(Duration::from_millis(500));
 
     let mut child = Command::new(installer.clone())
-        .current_dir(PathBuf::from("./.mcsi"))
-        .args(["--auto", "--path", "./work_dir", "--nojava"])
+        .args(["--auto", "--path", "./.mcsi/work_dir", "--nojava"])
         .stdout(Stdio::piped())
         .spawn()?;
 
@@ -173,16 +186,6 @@ async fn install_server(ctx: &mut Context) -> anyhow::Result<()> {
     remove_file(installer)
         .await?;
 
-    Ok(())
-}
-
-async fn post_process(ctx: &mut Context) -> anyhow::Result<()> {
-    info!("Finishing up...");
-
-    super::post_process(&ctx.target_dir)
-        .await?;
-
-    info!("Server is installed!");
     Ok(())
 }
 

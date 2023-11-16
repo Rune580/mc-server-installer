@@ -16,13 +16,13 @@ pub async fn install_forge<P: AsRef<Path>>(mc_version: McVersion, forge_version:
     let installer_dst = work_dir.as_ref().join("installer.jar");
     let universal_dst = work_dir.as_ref().join("server.jar");
 
-    println!("Downloading forge...");
+    info!("Downloading forge...");
     download_file(&installer_url, &installer_dst)
         .await?;
     download_file(&universal_url, &universal_dst)
         .await?;
 
-    println!("Installing forge...");
+    info!("Installing forge...");
     let output = Command::new("java")
         .current_dir(&work_dir)
         .args(["-jar", "installer.jar", "--installServer"])

@@ -9,7 +9,7 @@ use crate::fs_utils::{download_file, get_closest_common_parent, recursive_copy_t
 use crate::modloader::fabric::install_fabric;
 use crate::modloader::forge::install_forge;
 use crate::modloader::ModLoader;
-use crate::modpack::check_manifest;
+use crate::modpack::{check_manifest, post_process};
 use crate::modpack::flame::model::{ClientManifest, FileEntry, ManifestFileEntry};
 use crate::version::McVersion;
 
@@ -64,7 +64,7 @@ pub async fn handle_flame<T: AsRef<Path>>(
     resolve_main_file(&mut ctx).await?;
     ensure_server_pack(&mut ctx).await?;
     download_modpack(&mut ctx).await?;
-    post_process(&mut ctx).await?;
+    post_process(&ctx.target_dir).await?;
 
     Ok(())
 }
@@ -82,20 +82,17 @@ async fn resolve_main_file(ctx: &mut Context) -> anyhow::Result<()> {
 
         ctx.main_file = Some(main_file);
     } else {
-        match u64::from_str(ctx.version.as_str()) {
-            Ok(file_id) => {
-                info!("Version recognized as a file id, validating id...");
+        if let Ok(file_id) = u64::from_str(ctx.version.as_str()) {
+            info!("Version recognized as a file id, validating id...");
 
-                let main_file = ctx.client.get_file_info(ctx.project_id, file_id)
-                    .await;
+            let main_file = ctx.client.get_file_info(ctx.project_id, file_id)
+                .await;
 
-                if main_file.is_ok() {
-                    ctx.main_file = Some(main_file.unwrap());
-                    info!("file id is: {0}", ctx.main_file.clone().expect("file info must exist").id);
-                    return Ok(())
-                }
+            if main_file.is_ok() {
+                ctx.main_file = Some(main_file.unwrap());
+                info!("file id is: {0}", ctx.main_file.clone().expect("file info must exist").id);
+                return Ok(())
             }
-            Err(_) => {}
         }
         info!("Version is not a valid file id, performing name search...");
 
@@ -201,7 +198,7 @@ async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
                 .await?;
         }
 
-        let mods_dir = PathBuf::from(work_dir.clone())
+        let mods_dir = work_dir.clone()
             .join("mods");
         if !mods_dir.is_dir() {
             create_dir_all(&mods_dir)
@@ -224,7 +221,7 @@ async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
             let info = ctx.client.get_file_info(entry.project_id as u64, entry.file_id as u64)
                 .await?;
 
-            let dst = PathBuf::from(mods_dir.clone())
+            let dst = mods_dir.clone()
                 .join(info.file_name);
 
             download_file(&info.download_url, dst)
@@ -262,16 +259,6 @@ async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
         ModLoader::Quilt { .. } => {}
     }
 
-    Ok(())
-}
-
-async fn post_process(ctx: &mut Context) -> anyhow::Result<()> {
-    info!("Finishing up...");
-
-    super::post_process(&ctx.target_dir)
-        .await?;
-
-    info!("Server is installed!");
     Ok(())
 }
 

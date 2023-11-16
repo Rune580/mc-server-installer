@@ -2,12 +2,12 @@ use std::fs::{File, read, remove_file};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use chrono::Utc;
-use log::info;
+use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tokio::fs::{create_dir, create_dir_all, remove_dir_all};
+use tokio::fs::{create_dir_all, remove_dir_all};
 use walkdir::WalkDir;
-use crate::fs_utils::{backup_and_remove_files, file_path_relative_to, recursive_copy_to_dir, work_dir};
+use crate::fs_utils::{backup_and_remove_files, file_path_relative_to, logs_dir, mcsi_dir, recursive_copy_to_dir, work_dir};
 
 pub mod flame;
 pub mod ftb;
@@ -77,17 +77,20 @@ impl PackManifestBuilder {
         mut self,
         dir: T,
     ) -> Self {
+        let mut files = 0;
         for entry in WalkDir::new(&dir) {
             let entry = entry.unwrap();
             if entry.path().is_dir() {
                 continue;
             }
 
-            let relative = file_path_relative_to(&entry.path(), &dir)
+            let relative = file_path_relative_to(entry.path(), &dir)
                 .unwrap();
 
             self.files.push(String::from(relative.to_str().unwrap()));
+            files += 1;
         }
+        debug!("Added {} files to manifest. {} Total files", files, self.files.len());
 
         self
     }
@@ -96,13 +99,19 @@ impl PackManifestBuilder {
         mut self,
         dir: T,
     ) -> Self {
-        let dir = dir.as_ref();
-        if !dir.is_dir() {
-            return self;
-        }
+        let dir = PathBuf::from(dir.as_ref());
+        // if !dir.is_dir() {
+        //     return self;
+        // }
+
+        let prev = self.files.len();
 
         let dir = dir.to_str().unwrap().to_owned();
-        self.files.retain(|entry| entry.contains(&dir));
+        debug!("Excluding files from {}", dir);
+
+        self.files.retain(|entry| !entry.contains(&dir));
+
+        debug!("Excluded {} files from manifest", prev - self.files.len());
 
         self
     }
@@ -144,6 +153,8 @@ pub async fn check_manifest<T: AsRef<Path>>(target_dir: T) -> anyhow::Result<()>
 }
 
 pub async fn post_process<T: AsRef<Path>>(target_dir: T) -> anyhow::Result<()> {
+    info!("Finishing up...");
+
     let target_dir = target_dir.as_ref();
     let work_dir = work_dir();
 
@@ -153,22 +164,43 @@ pub async fn post_process<T: AsRef<Path>>(target_dir: T) -> anyhow::Result<()> {
     remove_dir_all(&work_dir)
         .await?;
 
-    let mcsi_dir = target_dir
+    let target_mcsi_dir = target_dir
         .join(".mcsi");
-
-    if !mcsi_dir.is_dir() {
-        remove_dir_all(PathBuf::from("./.mcsi"))
-            .await?;
-        create_dir(&mcsi_dir)
+    if !target_mcsi_dir.is_dir() {
+        create_dir_all(&target_mcsi_dir)
             .await?;
     }
 
+    let target_logs_dir = target_mcsi_dir
+        .join("logs");
+    if !target_logs_dir.is_dir() {
+        create_dir_all(&target_logs_dir)
+            .await?;
+    }
+
+    #[cfg(target_os = "linux")]
     let pack_manifest = PackManifest::builder()
-        .with_files_from_dir(&target_dir)
+        .with_files_from_dir(target_dir)
         .exclude_files_from_dir(".mcsi/")
         .finish();
 
-    pack_manifest.save_to(mcsi_dir)?;
+    #[cfg(target_os = "windows")]
+        let pack_manifest = PackManifest::builder()
+        .with_files_from_dir(target_dir)
+        .exclude_files_from_dir(".mcsi\\")
+        .finish();
 
+    pack_manifest.save_to(&target_mcsi_dir)?;
+
+    recursive_copy_to_dir(logs_dir(), target_logs_dir)
+        .await?;
+
+    let src_mcsi_dir = mcsi_dir();
+    if !src_mcsi_dir.eq(&target_mcsi_dir) {
+        remove_dir_all(src_mcsi_dir)
+            .await?;
+    }
+
+    println!("Server is installed!");
     Ok(())
 }
