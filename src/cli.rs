@@ -1,10 +1,13 @@
-use clap::{command, Subcommand, Parser};
+use clap::{command, Subcommand, Parser, ValueEnum};
 use indicatif::ProgressStyle;
+use log::LevelFilter;
 
 #[derive(Parser, Clone, Debug)]
 pub struct Cli {
     #[command(subcommand)]
     pub sub_command: CliSubCommand,
+    #[clap(env, long, default_value = "Info")]
+    pub rust_log: LogLevel,
 }
 
 #[derive(Clone, Debug, Subcommand)]
@@ -46,6 +49,29 @@ pub enum CliSubCommand {
         version: String,
         #[clap(env, long)]
         target_dir: String,
+    }
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug)]
+pub enum LogLevel {
+    Off,
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+}
+
+impl From<LogLevel> for LevelFilter {
+    fn from(value: LogLevel) -> Self {
+        match value {
+            LogLevel::Off => LevelFilter::Off,
+            LogLevel::Error => LevelFilter::Error,
+            LogLevel::Warn => LevelFilter::Warn,
+            LogLevel::Info => LevelFilter::Info,
+            LogLevel::Debug => LevelFilter::Debug,
+            LogLevel::Trace => LevelFilter::Trace,
+        }
     }
 }
 

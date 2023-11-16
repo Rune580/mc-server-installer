@@ -11,7 +11,7 @@ use tokio::fs::{remove_dir_all, remove_file};
 use crate::cli;
 use crate::fs_utils::{download_file, work_dir};
 use crate::modpack::ftb::client::FtbClient;
-use crate::modpack::check_manifest;
+use crate::modpack::{check_manifest, post_process};
 
 mod model;
 mod client;
@@ -59,7 +59,7 @@ pub async fn handle_ftb<T: AsRef<Path>>(
     #[cfg(target_os = "linux")]
     linux_make_installer_executable(&mut ctx).await?;
     install_server(&mut ctx).await?;
-    post_process(&mut ctx).await?;
+    post_process(&ctx.target_dir).await?;
 
     Ok(())
 }
@@ -186,16 +186,6 @@ async fn install_server(ctx: &mut Context) -> anyhow::Result<()> {
     remove_file(installer)
         .await?;
 
-    Ok(())
-}
-
-async fn post_process(ctx: &mut Context) -> anyhow::Result<()> {
-    info!("Finishing up...");
-
-    super::post_process(&ctx.target_dir)
-        .await?;
-
-    info!("Server is installed!");
     Ok(())
 }
 
