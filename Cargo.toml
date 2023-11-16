@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = { version = "1.0.75", features = ["backtrace"] }
-async-process = "1.8.1"
+async-process = "2.0.0"
 chrono = "0.4.31"
 clap = { version = "4.4.6", features = ["derive", "env"] }
 dotenv = { version = "0.15.0", features = ["clap"] }
