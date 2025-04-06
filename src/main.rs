@@ -16,7 +16,7 @@ mod version;
 pub mod fs_utils;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> color_eyre::Result<()> {
     dotenv().ok();
 
     let cli = Cli::parse();

@@ -25,7 +25,7 @@ impl FtbClient {
     pub async fn search(
         &mut self,
         terms: &[String],
-    ) -> anyhow::Result<SearchResults> {
+    ) -> color_eyre::Result<SearchResults> {
         let mut query = String::new();
 
         for (i, term) in terms.iter().enumerate() {
@@ -52,7 +52,7 @@ impl FtbClient {
     pub async fn get_pack_details(
         &mut self,
         pack_id: usize,
-    ) -> anyhow::Result<PackDetails> {
+    ) -> color_eyre::Result<PackDetails> {
         let url = format!("https://api.modpacks.ch/public/modpack/{pack_id}");
         let resp = self.client.get(url)
             .send()

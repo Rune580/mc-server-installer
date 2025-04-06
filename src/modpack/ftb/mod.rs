@@ -40,7 +40,7 @@ pub async fn handle_ftb<T: AsRef<Path>>(
     args: IdOrSearch,
     version: String,
     target_dir: T,
-) -> anyhow::Result<()> {
+) -> color_eyre::Result<()> {
     let mut ctx = Context {
         client: FtbClient::new(),
         args,
@@ -66,7 +66,7 @@ pub async fn handle_ftb<T: AsRef<Path>>(
 
 
 
-fn setup() -> anyhow::Result<()> {
+fn setup() -> color_eyre::Result<()> {
     let dir = PathBuf::from(".mcsi");
     if !dir.exists() {
         std::fs::create_dir(dir)?;
@@ -75,7 +75,7 @@ fn setup() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn resolve_pack_id(ctx: &mut Context) -> anyhow::Result<()> {
+async fn resolve_pack_id(ctx: &mut Context) -> color_eyre::Result<()> {
     let id = match &ctx.args {
         IdOrSearch::Id(id) => id.parse::<usize>().unwrap(),
         IdOrSearch::Search {
@@ -95,7 +95,7 @@ async fn resolve_pack_id(ctx: &mut Context) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn resolve_version_id(ctx: &mut Context) -> anyhow::Result<()> {
+async fn resolve_version_id(ctx: &mut Context) -> color_eyre::Result<()> {
     let pack_id = ctx.pack_id.unwrap();
     let mut details = ctx.client.get_pack_details(pack_id)
         .await?;
@@ -120,7 +120,7 @@ async fn resolve_version_id(ctx: &mut Context) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn download_server_installer(ctx: &mut Context) -> anyhow::Result<()> {
+async fn download_server_installer(ctx: &mut Context) -> color_eyre::Result<()> {
     let pack_id = ctx.pack_id.unwrap();
     let version_id = ctx.version_id.unwrap();
 
@@ -138,7 +138,7 @@ async fn download_server_installer(ctx: &mut Context) -> anyhow::Result<()> {
 }
 
 #[cfg(target_os = "linux")]
-async fn linux_make_installer_executable(ctx: &mut Context) -> anyhow::Result<()> {
+async fn linux_make_installer_executable(ctx: &mut Context) -> color_eyre::Result<()> {
     let installer = ctx.installer_path.clone().unwrap();
 
     Command::new("chmod")
@@ -149,7 +149,7 @@ async fn linux_make_installer_executable(ctx: &mut Context) -> anyhow::Result<()
     Ok(())
 }
 
-async fn install_server(ctx: &mut Context) -> anyhow::Result<()> {
+async fn install_server(ctx: &mut Context) -> color_eyre::Result<()> {
     let work_dir = work_dir();
     if work_dir.is_dir() {
         remove_dir_all(&work_dir)
