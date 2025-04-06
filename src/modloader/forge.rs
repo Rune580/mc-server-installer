@@ -5,7 +5,7 @@ use log::{error, info};
 use crate::fs_utils::download_file;
 use crate::version::McVersion;
 
-pub async fn install_forge<P: AsRef<Path>>(mc_version: McVersion, forge_version: &str, work_dir: P) -> anyhow::Result<()> {
+pub async fn install_forge<P: AsRef<Path>>(mc_version: McVersion, forge_version: &str, work_dir: P) -> color_eyre::Result<()> {
     let long_version = format!("{mc_version}-{forge_version}", mc_version = mc_version.as_str());
     let installer = format!("forge-{long_version}-installer.jar");
     let universal = format!("forge-{long_version}-universal.jar");
@@ -50,7 +50,7 @@ mod tests {
 
     #[tokio::test]
     async fn download_forge() {
-        let mc_version = McVersion::from_str("1.19.2").unwrap();
+        let mc_version = McVersion::from_str("1.20.1").unwrap();
         let forge_version = "43.2.21";
 
         let work_dir = PathBuf::new().join("tmp");

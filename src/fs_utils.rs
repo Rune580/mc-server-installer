@@ -1,17 +1,22 @@
 use std::collections::HashMap;
+use std::fs;
 use std::fs::File;
 use std::io::Write;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use chrono::Utc;
 use futures_util::StreamExt;
 use indicatif::ProgressBar;
 use log::warn;
+use regex::Regex;
+use thiserror::Error;
 use tokio::fs::{create_dir_all, read, remove_dir, remove_file, write};
 use tokio::io::AsyncWriteExt;
 use walkdir::WalkDir;
 use crate::cli;
 
-pub async fn recursive_copy_to_dir<TSrc: AsRef<Path>, TDst: AsRef<Path>>(src_dir: TSrc, dst_dir: TDst) -> anyhow::Result<()> {
+pub async fn recursive_copy_to_dir<TSrc: AsRef<Path>, TDst: AsRef<Path>>(src_dir: TSrc, dst_dir: TDst) -> color_eyre::Result<()> {
     let src_dir = src_dir.as_ref();
     let dst_dir = dst_dir.as_ref().to_str().unwrap();
 
@@ -66,7 +71,7 @@ pub async fn backup_and_remove_files<TSrc: AsRef<Path>, TDst: AsRef<Path>>(
     src_dir: TSrc,
     backup_dir: TDst,
     rel_files: Vec<String>,
-) -> anyhow::Result<()> {
+) -> color_eyre::Result<()> {
     let src_dir = src_dir.as_ref();
     let backup_dir = backup_dir.as_ref();
 
@@ -128,7 +133,7 @@ pub async fn backup_and_remove_files<TSrc: AsRef<Path>, TDst: AsRef<Path>>(
     Ok(())
 }
 
-pub fn file_path_relative_to<TFile: AsRef<Path>, TDir: AsRef<Path>>(file: TFile, dir: TDir) -> anyhow::Result<PathBuf> {
+pub fn file_path_relative_to<TFile: AsRef<Path>, TDir: AsRef<Path>>(file: TFile, dir: TDir) -> color_eyre::Result<PathBuf> {
     let file = file.as_ref();
     let dir = dir.as_ref();
 
@@ -142,7 +147,7 @@ pub fn file_path_relative_to<TFile: AsRef<Path>, TDir: AsRef<Path>>(file: TFile,
     Ok(relative)
 }
 
-pub async fn download_file<T: AsRef<Path>>(url: &str, dst: T) -> anyhow::Result<PathBuf> {
+pub async fn download_file<T: AsRef<Path>>(url: &str, dst: T) -> color_eyre::Result<PathBuf> {
     let file_name = dst.as_ref().file_name().unwrap().to_str().unwrap().to_string();
     let file_path = dst.as_ref();
 
@@ -185,7 +190,7 @@ struct DirDepthEntry {
     path: PathBuf,
 }
 
-pub async fn get_closest_common_parent<T: AsRef<Path>>(dir: T) -> anyhow::Result<PathBuf> {
+pub async fn get_closest_common_parent<T: AsRef<Path>>(dir: T) -> color_eyre::Result<PathBuf> {
     let dir = dir.as_ref();
     let mut items: Vec<DirDepthEntry> = Vec::new();
     let mut siblings: HashMap<usize, usize> = HashMap::new();
@@ -213,16 +218,19 @@ pub async fn get_closest_common_parent<T: AsRef<Path>>(dir: T) -> anyhow::Result
             item.siblings = *siblings.get(&item.depth).unwrap();
             item
         })
-        .filter(|item| item.siblings == 0)
-        .max_by_key(|item| item.depth)
+        .filter(|item| item.siblings != 0)
+        .min_by_key(|item| item.depth)
+        .unwrap()
+        .path
+        .parent()
         .unwrap();
 
-    let common_dir = PathBuf::from(&common.path);
+    let common_dir = PathBuf::from(common);
 
     Ok(common_dir)
 }
 
-pub fn ensure_dir<T: AsRef<Path>>(dir: T) -> anyhow::Result<()> {
+pub fn ensure_dir<T: AsRef<Path>>(dir: T) -> color_eyre::Result<()> {
     let dir = dir.as_ref();
 
     if !dir.is_dir() {
@@ -232,7 +240,7 @@ pub fn ensure_dir<T: AsRef<Path>>(dir: T) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn ensure_parent<T: AsRef<Path>>(path: T) -> anyhow::Result<()> {
+pub async fn ensure_parent<T: AsRef<Path>>(path: T) -> color_eyre::Result<()> {
     let path = path.as_ref();
 
     if let Some(parent) = path.parent() {
@@ -257,7 +265,7 @@ pub fn logs_dir() -> PathBuf {
     mcsi_dir().join("logs")
 }
 
-pub fn get_log_file() -> anyhow::Result<File> {
+pub fn get_log_file() -> color_eyre::Result<File> {
     let logs_dir = logs_dir();
     if !logs_dir.is_dir() {
         std::fs::create_dir_all(&logs_dir)?;
@@ -270,4 +278,43 @@ pub fn get_log_file() -> anyhow::Result<File> {
     let file = File::create(log_file_path)?;
 
     Ok(file)
+}
+
+pub fn get_server_start_script<T: AsRef<Path>>(dir: T) -> Option<PathBuf> {
+    let dir = dir.as_ref();
+    let re = Regex::new(r"(?:(?:S|start)|(?:R|run))?.*?(?:S|server)|(?:S|server)|(?:(?:S|start)|(?:R|run))\.sh$").unwrap();
+
+    for entry in WalkDir::new(dir).max_depth(1) {
+        let entry = entry.unwrap();
+        if !entry.path().is_dir() {
+            continue;
+        }
+
+        if re.is_match(entry.file_name().to_str().unwrap()) {
+            return Some(entry.path().to_path_buf());
+        }
+    }
+
+    None
+}
+
+#[cfg(target_os = "linux")]
+pub fn set_as_executable<T: AsRef<Path>>(file: T) -> color_eyre::Result<()> {
+    let file = file.as_ref();
+    if !file.is_file() {
+        Err(FsError::FileDoesntExist(file.to_owned()))?;
+    }
+
+    Command::new("chmod")
+        .arg("+x")
+        .arg(file.canonicalize()?)
+        .output()?;
+
+    Ok(())
+}
+
+#[derive(Error, Clone, Debug)]
+pub enum FsError {
+    #[error("`{0}` does not exist")]
+    FileDoesntExist(PathBuf),
 }

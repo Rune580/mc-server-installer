@@ -2,7 +2,7 @@ use std::path::Path;
 use crate::fs_utils::download_file;
 use crate::version::McVersion;
 
-pub async fn install_fabric<P: AsRef<Path>>(mc_version: McVersion, loader_version: &str, work_dir: P) -> anyhow::Result<()> {
+pub async fn install_fabric<P: AsRef<Path>>(mc_version: McVersion, loader_version: &str, work_dir: P) -> color_eyre::Result<()> {
     let installer_version = latest_fabric_installer_version()
         .await?;
 
@@ -15,7 +15,7 @@ pub async fn install_fabric<P: AsRef<Path>>(mc_version: McVersion, loader_versio
     Ok(())
 }
 
-async fn latest_fabric_installer_version() -> anyhow::Result<String> {
+async fn latest_fabric_installer_version() -> color_eyre::Result<String> {
     let resp = reqwest::get("https://meta.fabricmc.net/v2/versions/installer")
         .await?
         .text()

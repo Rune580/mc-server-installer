@@ -2,12 +2,14 @@ use std::fs::{File, read, remove_file};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use chrono::Utc;
+use futures_util::AsyncWriteExt;
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::fs::{create_dir_all, remove_dir_all};
 use walkdir::WalkDir;
-use crate::fs_utils::{backup_and_remove_files, file_path_relative_to, logs_dir, mcsi_dir, recursive_copy_to_dir, work_dir};
+use crate::fs_utils::{backup_and_remove_files, file_path_relative_to, get_server_start_script, logs_dir, mcsi_dir, recursive_copy_to_dir, set_as_executable, work_dir};
+use crate::modloader::ModLoader;
 
 pub mod flame;
 pub mod ftb;
@@ -30,7 +32,7 @@ impl PackManifest {
     pub fn save_to<T: AsRef<Path>>(
         &self,
         mcsi_dir: T,
-    ) -> anyhow::Result<()> {
+    ) -> color_eyre::Result<()> {
         let file_path = mcsi_dir.as_ref()
             .join("manifest.json");
         if file_path.is_file() {
@@ -46,7 +48,7 @@ impl PackManifest {
 
     pub fn load_from<T: AsRef<Path>>(
         mcsi_dir: T,
-    ) -> anyhow::Result<Self> {
+    ) -> color_eyre::Result<Self> {
         let file_path = mcsi_dir.as_ref()
             .join("manifest.json");
         if !file_path.is_file() {
@@ -123,7 +125,7 @@ pub enum ManifestError {
     ManifestNotFound,
 }
 
-pub async fn check_manifest<T: AsRef<Path>>(target_dir: T) -> anyhow::Result<()> {
+pub async fn check_manifest<T: AsRef<Path>>(target_dir: T) -> color_eyre::Result<()> {
     let target_dir = target_dir.as_ref();
     let mcsi_dir = target_dir
         .join(".mcsi");
@@ -152,7 +154,59 @@ pub async fn check_manifest<T: AsRef<Path>>(target_dir: T) -> anyhow::Result<()>
     Ok(())
 }
 
-pub async fn post_process<T: AsRef<Path>>(target_dir: T) -> anyhow::Result<()> {
+fn create_mc_start_script() -> color_eyre::Result<File>{
+    let start_script_path = work_dir()
+        .join("mc-start.sh");
+
+    let file = File::create(&start_script_path)?;
+
+    Ok(file)
+}
+
+#[cfg(target_os = "linux")]
+fn make_mc_start_script_executable() -> color_eyre::Result<()> {
+    let start_script_path = work_dir()
+        .join("mc-start.sh");
+
+    set_as_executable(start_script_path)
+}
+
+pub async fn ensure_server_start_script(mod_loader: Option<ModLoader>) -> color_eyre::Result<()> {
+    let start_script = get_server_start_script(work_dir());
+
+    if start_script.is_some() {
+        let mut mc_start_file = create_mc_start_script()?;
+        write!(&mut mc_start_file, "#!/usr/bin/env sh\n{0}", start_script.unwrap().to_str().unwrap())?;
+        mc_start_file.flush()?;
+
+        #[cfg(target_os = "linux")]
+        make_mc_start_script_executable()?;
+
+        return Ok(());
+    }
+
+    if let Some(mod_loader) = mod_loader {
+        match mod_loader {
+            ModLoader::Forge { .. } => {
+                let mut mc_start_file = create_mc_start_script()?;
+                write!(&mut mc_start_file, "#!/usr/bin/env sh\njava -Xms128M -Xmx${{SERVER_MEMORY}}M -jar server.jar")?;
+
+                #[cfg(target_os = "linux")]
+                make_mc_start_script_executable()?;
+            }
+            ModLoader::Fabric { .. } => {
+                todo!()
+            }
+            ModLoader::Quilt { .. } => {
+                todo!()
+            }
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn post_process<T: AsRef<Path>>(target_dir: T) -> color_eyre::Result<()> {
     info!("Finishing up...");
 
     let target_dir = target_dir.as_ref();

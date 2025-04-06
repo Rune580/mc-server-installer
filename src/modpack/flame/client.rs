@@ -16,7 +16,7 @@ impl FlameClient {
         }
     }
 
-    pub async fn get_mod_info(&mut self, project_id: u64) -> anyhow::Result<ModInfo> {
+    pub async fn get_mod_info(&mut self, project_id: u64) -> color_eyre::Result<ModInfo> {
         let url = format!("https://api.curseforge.com/v1/mods/{0}", project_id);
         let resp = self.client.get(url)
             .send().await?
@@ -27,7 +27,7 @@ impl FlameClient {
         Ok(info)
     }
 
-    pub async fn get_file_info(&mut self, project_id: u64, file_id: u64) -> anyhow::Result<FileEntry> {
+    pub async fn get_file_info(&mut self, project_id: u64, file_id: u64) -> color_eyre::Result<FileEntry> {
         let url = format!("https://api.curseforge.com/v1/mods/{0}/files/{1}", project_id, file_id);
         let resp = self.client.get(url)
             .send().await?
@@ -39,7 +39,7 @@ impl FlameClient {
     }
 
     // TODO: pagination support.
-    pub async fn get_files(&mut self, project_id: u64, _page: u32) -> anyhow::Result<FilesList> {
+    pub async fn get_files(&mut self, project_id: u64, _page: u32) -> color_eyre::Result<FilesList> {
         let url = format!("https://api.curseforge.com/v1/mods/{0}/files", project_id);
         let resp = self.client.get(url)
             .send().await?
@@ -51,7 +51,7 @@ impl FlameClient {
     }
 }
 
-fn data_root<T: DeserializeOwned>(resp: String) -> anyhow::Result<T> {
+fn data_root<T: DeserializeOwned>(resp: String) -> color_eyre::Result<T> {
     let json: serde_json::Value = serde_json::from_str(resp.as_str())?;
     let root: T = serde_json::from_value(json.get("data").expect("root data").clone())?;
 

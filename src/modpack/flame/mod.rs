@@ -9,7 +9,7 @@ use crate::fs_utils::{download_file, get_closest_common_parent, recursive_copy_t
 use crate::modloader::fabric::install_fabric;
 use crate::modloader::forge::install_forge;
 use crate::modloader::ModLoader;
-use crate::modpack::{check_manifest, post_process};
+use crate::modpack::{check_manifest, ensure_server_start_script, post_process};
 use crate::modpack::flame::model::{ClientManifest, FileEntry, ManifestFileEntry};
 use crate::version::McVersion;
 
@@ -36,7 +36,7 @@ pub async fn handle_flame<T: AsRef<Path>>(
     project_id: u64,
     version: String,
     target_dir: T,
-) -> anyhow::Result<()> {
+) -> color_eyre::Result<()> {
     debug!("api_key: \'{api_key}\' project_id: \'{project_id}\' version: \'{version}\'");
 
     let mut headers = HeaderMap::new();
@@ -64,12 +64,13 @@ pub async fn handle_flame<T: AsRef<Path>>(
     resolve_main_file(&mut ctx).await?;
     ensure_server_pack(&mut ctx).await?;
     download_modpack(&mut ctx).await?;
+    ensure_server_start_script(ctx.mod_loader).await?;
     post_process(&ctx.target_dir).await?;
 
     Ok(())
 }
 
-async fn resolve_main_file(ctx: &mut Context) -> anyhow::Result<()> {
+async fn resolve_main_file(ctx: &mut Context) -> color_eyre::Result<()> {
     if ctx.version.eq_ignore_ascii_case("latest") {
         info!("Version set to \'latest\', determining file id...");
 
@@ -89,7 +90,7 @@ async fn resolve_main_file(ctx: &mut Context) -> anyhow::Result<()> {
                 .await;
 
             if main_file.is_ok() {
-                ctx.main_file = Some(main_file.unwrap());
+                ctx.main_file = Some(main_file?);
                 info!("file id is: {0}", ctx.main_file.clone().expect("file info must exist").id);
                 return Ok(())
             }
@@ -123,7 +124,7 @@ async fn resolve_main_file(ctx: &mut Context) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn ensure_server_pack(ctx: &mut Context) -> anyhow::Result<()> {
+async fn ensure_server_pack(ctx: &mut Context) -> color_eyre::Result<()> {
     let main_file = ctx.main_file
         .clone()
         .expect("main file must exist");
@@ -153,7 +154,7 @@ async fn ensure_server_pack(ctx: &mut Context) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn setup(_ctx: &mut Context) -> anyhow::Result<()> {
+async fn setup(_ctx: &mut Context) -> color_eyre::Result<()> {
     let dir = PathBuf::from(".mcsi");
     if !dir.exists() {
         std::fs::create_dir(dir)?;
@@ -162,7 +163,7 @@ async fn setup(_ctx: &mut Context) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
+async fn download_modpack(ctx: &mut Context) -> color_eyre::Result<()> {
     download_client(ctx).await?;
     download_server(ctx).await?;
 
@@ -262,7 +263,7 @@ async fn download_modpack(ctx: &mut Context) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn resolve_mc_info(ctx: &mut Context) -> anyhow::Result<()> {
+async fn resolve_mc_info(ctx: &mut Context) -> color_eyre::Result<()> {
     let client_manifest_path = PathBuf::from("./.mcsi")
         .join("client")
         .join("manifest.json");
@@ -283,7 +284,7 @@ async fn resolve_mc_info(ctx: &mut Context) -> anyhow::Result<()> {
 }
 
 
-async fn download_client(ctx: &mut Context) -> anyhow::Result<()> {
+async fn download_client(ctx: &mut Context) -> color_eyre::Result<()> {
     let client_file = if ctx.main_file.clone().is_some_and(|entry| !entry.is_server_pack) {
         ctx.main_file.clone().unwrap()
     } else if ctx.parent_file.clone().is_some_and(|entry| !entry.is_server_pack) {
@@ -315,7 +316,7 @@ async fn download_client(ctx: &mut Context) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn download_server(ctx: &mut Context) -> anyhow::Result<()> {
+async fn download_server(ctx: &mut Context) -> color_eyre::Result<()> {
     let server_pack = if ctx.main_file.clone().is_some_and(|entry| entry.is_server_pack) {
         ctx.main_file.clone().unwrap()
     } else {
