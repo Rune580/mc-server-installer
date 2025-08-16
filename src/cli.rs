@@ -34,6 +34,12 @@ pub enum CliSubCommand {
         #[clap(env, long)]
         target_dir: String,
     },
+    NeoForge {
+        #[clap(env, long)]
+        version: String,
+        #[clap(env, long)]
+        target_dir: String,
+    },
     Forge {
         #[clap(env, long)]
         mc_version: String,

@@ -6,6 +6,7 @@ use cli::Cli;
 use crate::fs_utils::{ensure_dir, get_log_file};
 use crate::modloader::fabric::install_fabric;
 use crate::modloader::forge::install_forge;
+use crate::modloader::neoforge::install_neoforge;
 use crate::modpack::ftb::IdOrSearch;
 use crate::version::McVersion;
 
@@ -52,6 +53,14 @@ async fn main() -> color_eyre::Result<()> {
             };
 
             modpack::ftb::handle_ftb(args, version, target_dir)
+                .await?;
+        }
+        cli::CliSubCommand::NeoForge {
+            version,
+            target_dir,
+        } => {
+            ensure_dir(&target_dir)?;
+            install_neoforge(&version, &target_dir)
                 .await?;
         }
         cli::CliSubCommand::Forge {
