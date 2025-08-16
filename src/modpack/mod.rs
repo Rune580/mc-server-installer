@@ -273,7 +273,7 @@ mod tests {
     use std::path::PathBuf;
     use log::LevelFilter;
     use simplelog::{ColorChoice, CombinedLogger, TermLogger, TerminalMode, WriteLogger};
-    use crate::fs_utils::{get_log_file, mcsi_dir};
+    use crate::fs_utils::get_log_file;
     use crate::modpack::flame;
 
     fn init_logging() {
