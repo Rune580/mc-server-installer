@@ -2,13 +2,14 @@ use std::fs::{File, read, remove_file};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use chrono::Utc;
-use futures_util::AsyncWriteExt;
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::fs::{create_dir_all, remove_dir_all};
 use walkdir::WalkDir;
-use crate::fs_utils::{backup_and_remove_files, file_path_relative_to, get_server_start_script, logs_dir, mcsi_dir, recursive_copy_to_dir, set_as_executable, work_dir};
+use crate::fs_utils::{backup_and_remove_files, file_path_relative_to, get_server_start_script, logs_dir, mcsi_dir, recursive_copy_to_dir, work_dir};
+#[cfg(target_os = "linux")]
+use crate::fs_utils::set_as_executable;
 use crate::modloader::ModLoader;
 
 pub mod flame;
