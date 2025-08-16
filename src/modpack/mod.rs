@@ -286,7 +286,7 @@ mod tests {
         ).unwrap();
     }
 
-    async fn test_flame_pack(project_id: u64, version: &str) -> color_eyre::Result<()> {
+    async fn test_flame_pack(project_id: u64, version: &str, skip_server_pack: bool) -> color_eyre::Result<()> {
         init_logging();
         dotenvy::dotenv().ok();
         let api_key = std::env::var("API_KEY")?;
@@ -295,7 +295,7 @@ mod tests {
             .join("tests")
             .join(format!("flame-{project_id}-{version}"));
 
-        flame::handle_flame(api_key, project_id, version.to_string(), target_dir)
+        flame::handle_flame(api_key, project_id, version.to_string(), target_dir, skip_server_pack)
             .await?;
 
         Ok(())
@@ -306,7 +306,7 @@ mod tests {
         let project_id = 351508;
         let version = "6822909";
 
-        test_flame_pack(project_id, version)
+        test_flame_pack(project_id, version, false)
             .await
             .unwrap();
     }
@@ -316,7 +316,7 @@ mod tests {
         let project_id = 925200;
         let version = "6826503";
 
-        test_flame_pack(project_id, version)
+        test_flame_pack(project_id, version, false)
             .await
             .unwrap();
     }

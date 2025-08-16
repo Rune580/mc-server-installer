@@ -30,6 +30,7 @@ struct Context {
     mod_loader: Option<ModLoader>,
     mod_list: Option<Vec<ManifestFileEntry>>,
     target_dir: PathBuf,
+    skip_server_pack: bool,
 }
 
 pub async fn handle_flame<T: AsRef<Path>>(
@@ -37,6 +38,7 @@ pub async fn handle_flame<T: AsRef<Path>>(
     project_id: u64,
     version: String,
     target_dir: T,
+    skip_server_pack: bool,
 ) -> color_eyre::Result<()> {
     debug!("api_key: \'{api_key}\' project_id: \'{project_id}\' version: \'{version}\'");
 
@@ -58,6 +60,7 @@ pub async fn handle_flame<T: AsRef<Path>>(
         mod_loader: None,
         mod_list: None,
         target_dir: target_dir.as_ref().to_path_buf(),
+        skip_server_pack
     };
 
     check_manifest(&ctx.target_dir).await?;
@@ -319,6 +322,10 @@ async fn download_client(ctx: &mut Context) -> color_eyre::Result<()> {
 }
 
 async fn download_server(ctx: &mut Context) -> color_eyre::Result<()> {
+    if ctx.skip_server_pack {
+        return Ok(());
+    }
+
     let server_pack = if ctx.main_file.clone().is_some_and(|entry| entry.is_server_pack) {
         ctx.main_file.clone().unwrap()
     } else {

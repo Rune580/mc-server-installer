@@ -35,7 +35,8 @@ async fn main() -> color_eyre::Result<()> {
             project_id,
             version,
             target_dir,
-        } => modpack::flame::handle_flame(api_key, project_id, version, target_dir).await?,
+            skip_server_pack,
+        } => modpack::flame::handle_flame(api_key, project_id, version, target_dir, skip_server_pack).await?,
         cli::CliSubCommand::Ftb {
             search_terms,
             mc_version,

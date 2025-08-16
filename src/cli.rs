@@ -21,6 +21,8 @@ pub enum CliSubCommand {
         version: String,
         #[clap(env, long)]
         target_dir: String,
+        #[clap(env, long)]
+        skip_server_pack: bool,
     },
     Ftb {
         #[clap(env, long,  required_unless_present="id", conflicts_with="id")]
