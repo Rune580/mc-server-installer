@@ -3,10 +3,14 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub mod fabric;
+pub mod neoforge;
 pub mod forge;
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub enum ModLoader {
+    NeoForge {
+        version: String,
+    },
     Forge {
         version: String,
     },
@@ -22,7 +26,17 @@ impl FromStr for ModLoader {
     type Err = ModLoaderParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.contains("forge") {
+        if s.contains("neoforge") {
+            let neoforge_version = s
+                .split("-")
+                .last()
+                .ok_or(ModLoaderParseError::InvalidInput)?;
+
+            Ok(ModLoader::NeoForge {
+                version: neoforge_version.to_string(),
+            })
+        }
+        else if s.contains("forge") {
             let forge_version = s
                 .split("-")
                 .last()

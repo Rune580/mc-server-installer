@@ -6,6 +6,8 @@ use crate::fs_utils::download_file;
 use crate::version::McVersion;
 
 pub async fn install_forge<P: AsRef<Path>>(mc_version: McVersion, forge_version: &str, work_dir: P) -> color_eyre::Result<()> {
+    info!("Downloading forge...");
+
     let long_version = format!("{mc_version}-{forge_version}", mc_version = mc_version.as_str());
     let installer = format!("forge-{long_version}-installer.jar");
     let universal = format!("forge-{long_version}-universal.jar");
@@ -15,8 +17,7 @@ pub async fn install_forge<P: AsRef<Path>>(mc_version: McVersion, forge_version:
 
     let installer_dst = work_dir.as_ref().join("installer.jar");
     let universal_dst = work_dir.as_ref().join("server.jar");
-
-    info!("Downloading forge...");
+    
     download_file(&installer_url, &installer_dst)
         .await?;
     download_file(&universal_url, &universal_dst)

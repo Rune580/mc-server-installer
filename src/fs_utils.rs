@@ -8,7 +8,7 @@ use std::process::Command;
 use chrono::Utc;
 use futures_util::StreamExt;
 use indicatif::ProgressBar;
-use log::warn;
+use log::{info, warn};
 use regex::Regex;
 use thiserror::Error;
 use tokio::fs::{create_dir_all, read, remove_dir, remove_file, write};
@@ -20,7 +20,13 @@ pub async fn recursive_copy_to_dir<TSrc: AsRef<Path>, TDst: AsRef<Path>>(src_dir
     let src_dir = src_dir.as_ref();
     let dst_dir = dst_dir.as_ref().to_str().unwrap();
 
-    println!("Copying files...");
+    // Log and return if we try to copy from an invalid directory
+    if !src_dir.is_dir() {
+        warn!("{:?} does not exist! Can't copy from a non-existing directory", src_dir);
+        return Ok(());
+    }
+
+    info!("Copying files...");
     let copy_bar = ProgressBar::new_spinner()
         .with_style(cli::copy_progress_style());
 
@@ -80,7 +86,7 @@ pub async fn backup_and_remove_files<TSrc: AsRef<Path>, TDst: AsRef<Path>>(
             .await?;
     }
 
-    println!("Starting backup of files...");
+    info!("Starting backup of files...");
     let backup_bar = ProgressBar::new(rel_files.len() as u64)
         .with_style(cli::backup_progress_style());
 
@@ -147,6 +153,7 @@ pub fn file_path_relative_to<TFile: AsRef<Path>, TDir: AsRef<Path>>(file: TFile,
     Ok(relative)
 }
 
+#[cfg(not(test))]
 pub async fn download_file<T: AsRef<Path>>(url: &str, dst: T) -> color_eyre::Result<PathBuf> {
     let file_name = dst.as_ref().file_name().unwrap().to_str().unwrap().to_string();
     let file_path = dst.as_ref();
@@ -156,7 +163,7 @@ pub async fn download_file<T: AsRef<Path>>(url: &str, dst: T) -> color_eyre::Res
     }
 
     let mut file = tokio::fs::File::create(&file_path).await?;
-    println!("Downloading {0}...", &file_name);
+    info!("Downloading {0}...", &file_name);
 
     let resp = reqwest::get(url)
         .await?;
@@ -171,6 +178,58 @@ pub async fn download_file<T: AsRef<Path>>(url: &str, dst: T) -> color_eyre::Res
         let chunk = chunk_result?;
         let chunk_len = chunk.len() as u64;
 
+        file.write_all(&chunk).await?;
+
+        download_bar.inc(chunk_len);
+    }
+
+    file.flush().await?;
+
+    download_bar.finish();
+
+    Ok(file_path.to_path_buf())
+}
+
+#[cfg(test)]
+pub async fn download_file<T: AsRef<Path>>(url: &str, dst: T) -> color_eyre::Result<PathBuf> {
+    use base64::Engine;
+
+    let file_name = dst.as_ref().file_name().unwrap().to_str().unwrap().to_string();
+    let file_path = dst.as_ref();
+
+    if file_path.is_file() {
+        std::fs::remove_file(file_path)?;
+    }
+
+    info!("Downloading {0}...", &file_name);
+
+    let cache_loc = PathBuf::from(".mcsi-test-dir")
+        .join("cache");
+
+    if !cache_loc.is_dir() {
+        std::fs::create_dir_all(&cache_loc)?;
+    }
+
+    let cached_file = cache_loc.join(base64::engine::general_purpose::STANDARD_NO_PAD.encode(&url));
+    if cached_file.is_file() {
+        std::fs::copy(&cached_file, &file_path)?;
+        return Ok(file_path.to_path_buf());
+    }
+
+    let mut file = tokio::fs::File::create(&file_path).await?;
+
+    let resp = reqwest::get(url)
+        .await?;
+
+    let total_bytes = resp.content_length().unwrap();
+    let download_bar = ProgressBar::new(total_bytes)
+        .with_style(cli::download_progress_style())
+        .with_message(file_name.clone());
+
+    let mut stream = resp.bytes_stream();
+    while let Some(chunk_result) = stream.next().await {
+        let chunk = chunk_result?;
+        let chunk_len = chunk.len() as u64;
 
         file.write_all(&chunk).await?;
 
@@ -180,6 +239,8 @@ pub async fn download_file<T: AsRef<Path>>(url: &str, dst: T) -> color_eyre::Res
     file.flush().await?;
 
     download_bar.finish();
+
+    std::fs::copy(&file_path, &cached_file)?;
 
     Ok(file_path.to_path_buf())
 }

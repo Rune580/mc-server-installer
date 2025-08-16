@@ -9,6 +9,7 @@ use crate::fs_utils::{download_file, get_closest_common_parent, recursive_copy_t
 use crate::modloader::fabric::install_fabric;
 use crate::modloader::forge::install_forge;
 use crate::modloader::ModLoader;
+use crate::modloader::neoforge::install_neoforge;
 use crate::modpack::{check_manifest, ensure_server_start_script, post_process};
 use crate::modpack::flame::model::{ClientManifest, FileEntry, ManifestFileEntry};
 use crate::version::McVersion;
@@ -240,22 +241,23 @@ async fn download_modpack(ctx: &mut Context) -> color_eyre::Result<()> {
     }
 
     match &ctx.mod_loader.clone().unwrap() {
+        ModLoader::NeoForge { version } => {
+            info!("Detected mod loader: NeoForge, Version: {}", version);
+
+            install_neoforge(version, &work_dir)
+                .await?;
+        }
         ModLoader::Forge { version } => {
-            info!("loader version resolved to: {}", version);
+            info!("Detected mod loader: Forge, Version: {}", version);
 
             install_forge(ctx.mc_version.clone().unwrap(), version, &work_dir)
                 .await?;
-
-            info!("finished installing forge!");
         }
         ModLoader::Fabric { version } => {
-            info!("loader version resolved to: {}", version);
-            println!("Installing fabric");
+            info!("Detected mod loader: Fabric, Version: {}", version);
 
             install_fabric(ctx.mc_version.clone().unwrap(), version, &work_dir)
                 .await?;
-
-            println!("done!");
         }
         ModLoader::Quilt { .. } => {}
     }

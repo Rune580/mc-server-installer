@@ -1,6 +1,6 @@
 use std::str::FromStr;
 use clap::Parser;
-use dotenv::dotenv;
+use dotenvy::dotenv;
 use simplelog::{ColorChoice, CombinedLogger, TerminalMode, TermLogger, WriteLogger};
 use cli::Cli;
 use crate::fs_utils::{ensure_dir, get_log_file};

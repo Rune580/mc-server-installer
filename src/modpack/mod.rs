@@ -154,7 +154,7 @@ pub async fn check_manifest<T: AsRef<Path>>(target_dir: T) -> color_eyre::Result
     Ok(())
 }
 
-fn create_mc_start_script() -> color_eyre::Result<File>{
+fn create_mc_start_script() -> color_eyre::Result<File> {
     let start_script_path = work_dir()
         .join("mc-start.sh");
 
@@ -187,8 +187,17 @@ pub async fn ensure_server_start_script(mod_loader: Option<ModLoader>) -> color_
 
     if let Some(mod_loader) = mod_loader {
         match mod_loader {
+            ModLoader::NeoForge { .. } => {
+                let mut mc_start_file = create_mc_start_script()?;
+                #[cfg(target_os = "linux")]
+                write!(&mut mc_start_file, "#!/usr/bin/env sh\njava -Xms128M -Xmx${{SERVER_MEMORY}}M -jar server.jar")?;
+
+                #[cfg(target_os = "linux")]
+                make_mc_start_script_executable()?;
+            }
             ModLoader::Forge { .. } => {
                 let mut mc_start_file = create_mc_start_script()?;
+                #[cfg(target_os = "linux")]
                 write!(&mut mc_start_file, "#!/usr/bin/env sh\njava -Xms128M -Xmx${{SERVER_MEMORY}}M -jar server.jar")?;
 
                 #[cfg(target_os = "linux")]
@@ -255,6 +264,59 @@ pub async fn post_process<T: AsRef<Path>>(target_dir: T) -> color_eyre::Result<(
             .await?;
     }
 
-    println!("Server is installed!");
+    info!("Server is installed!");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+    use log::LevelFilter;
+    use simplelog::{ColorChoice, CombinedLogger, TermLogger, TerminalMode, WriteLogger};
+    use crate::fs_utils::{get_log_file, mcsi_dir};
+    use crate::modpack::flame;
+
+    fn init_logging() {
+        CombinedLogger::init(
+            vec![
+                TermLogger::new(LevelFilter::Debug, simplelog::Config::default(), TerminalMode::Mixed, ColorChoice::Auto),
+                WriteLogger::new(LevelFilter::Debug, simplelog::Config::default(), get_log_file().unwrap()),
+            ]
+        ).unwrap();
+    }
+
+    async fn test_flame_pack(project_id: u64, version: &str) -> color_eyre::Result<()> {
+        init_logging();
+        dotenvy::dotenv().ok();
+        let api_key = std::env::var("API_KEY")?;
+
+        let target_dir = PathBuf::from("./.mcsi-test-dir")
+            .join("tests")
+            .join(format!("flame-{project_id}-{version}"));
+
+        flame::handle_flame(api_key, project_id, version.to_string(), target_dir)
+            .await?;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn download_flame_pack_with_no_server_pack_1() {
+        let project_id = 351508;
+        let version = "6822909";
+
+        test_flame_pack(project_id, version)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn download_flame_pack_with_server_pack_1() {
+        let project_id = 925200;
+        let version = "6826503";
+
+        test_flame_pack(project_id, version)
+            .await
+            .unwrap();
+    }
 }
