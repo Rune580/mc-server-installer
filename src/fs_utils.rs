@@ -164,8 +164,24 @@ pub async fn download_file<T: AsRef<Path>>(url: &str, dst: T) -> color_eyre::Res
     let mut file = tokio::fs::File::create(&file_path).await?;
     info!("Downloading {0}...", &file_name);
 
-    let resp = reqwest::get(url)
-        .await?;
+    let mut retries_left = 5;
+
+    let mut result = reqwest::get(url)
+        .await;
+
+    while let Err(err) = result  {
+        retries_left -= 1;
+        if retries_left <= 0 {
+            return Err(err.into());
+        }
+        
+        info!("Download failed: {0}\n {1} attempts left", &err, retries_left);
+        
+        result = reqwest::get(url)
+            .await;
+    }
+    
+    let resp = result?;
 
     let total_bytes = resp.content_length().unwrap();
     let download_bar = ProgressBar::new(total_bytes)
